@@ -2,7 +2,25 @@
 
 พอร์ตของ `~/.claude/skills/vdo-archive/scripts/vdo` มาเป็น Rust binary ตัวเดียว —
 build ลง macOS / Linux / **Windows** ได้ เป็น **zero-dependency** (ไม่มี crate ภายนอก).
-มี GUI mockup (ลอกโทน [codemunha.com](https://codemunha.com)) ที่ `ui/mockup.html`.
+
+มาพร้อม **GUI (Tauri)** โทน [codemunha.com](https://codemunha.com) ที่เรียก core เดียวกับ CLI.
+
+## โครงสร้าง
+```
+src/lib.rs        core: download/provision/verify/จัดหมวด (Result + progress callback, zero-dep)
+src/main.rs       CLI บางๆ ครอบ core
+src-tauri/        Tauri v2 app — command + event ครอบ core เดียวกัน
+ui/index.html     frontend (เรียก IPC จริง; เปิดในเบราว์เซอร์ = เดโม)
+ui/mockup.html    ดีไซน์อ้างอิงเฉย ๆ
+```
+
+## GUI (Tauri)
+```
+bunx @tauri-apps/cli@2 dev      # dev: เปิดหน้าต่าง + hot reload
+bunx @tauri-apps/cli@2 build    # release: ได้ .app (mac) / .exe+installer (Windows)
+```
+> Windows: cross-build GUI จาก mac ยุ่ง — แนะนำ build บน Windows runner (GitHub Actions).
+> ตัว CLI (`vdo-dl`) ยัง cross-build ไป `.exe` จาก mac ได้ปกติ (ดูล่าง).
 
 ตัว `vdo-dl` ทำหน้าที่สั่งงาน `yt-dlp` + `ffmpeg`:
 โหลดคุณภาพสูงสุด (`bv*+ba/b`) → merge mp4 แบบ `-c copy` (ไม่ re-encode) →
@@ -21,14 +39,24 @@ PATH แล้ว (เช่น `brew install` บน mac) ก็ใช้ตั
 
 อัปเดตเครื่องมือที่ bundle ไว้: `vdo-dl update` (yt-dlp รองรับ self-update `-U`).
 
-## Usage
+## Usage (CLI)
 
 ```
-vdo-dl <URL>                      โหลด → พักที่ ~/VDO/tmp/ (พิมพ์ path)
-vdo-dl <URL> "ชื่อเรื่อง"          โหลด + ตั้งชื่อ → ~/VDO/ยังไม่จัดหมวด/
-vdo-dl <URL> "ชื่อเรื่อง" "หมวด"   โหลด + ตั้งชื่อ → ~/VDO/<หมวด>/
+vdo-dl [--audio] [--quality N] <URL> ["ชื่อเรื่อง"] ["หมวด"]
 vdo-dl -F <URL>                   ดูตาราง format ที่มี (ไม่โหลด)
+vdo-dl update                     อัปเดต yt-dlp (+ ffmpeg บน Windows)
+
+# ตัวอย่าง
+vdo-dl <URL> "ชื่อ" "หมวด"          วิดีโอคุณภาพสูงสุด → ~/VDO/<หมวด>/ชื่อ.mp4
+vdo-dl --audio <URL> "ชื่อ" "เพลง"  เสียงอย่างเดียว → .mp3
+vdo-dl --quality 720 <URL> "ชื่อ"   จำกัด ≤720p
 ```
+
+## GUI features
+วางลิงก์ (อ่าน clipboard) · Smart Mode (วาง=โหลดทันที) · เลือกวิดีโอ/เสียง + คุณภาพ ·
+แท็บ ทั้งหมด/วิดีโอ/เสียง · progress แยกต่อรายการ (โหลดพร้อมกันได้) · หยุด/ลองใหม่ ·
+เปิดโฟลเดอร์เมื่อเสร็จ · ดึงชื่อ+thumbnail อัตโนมัติ · จำรายการข้ามการเปิด/ปิด · ลากลิงก์มาวาง ·
+dark/light · อัปเดตเครื่องมือในตั้งค่า
 
 Env: `VDO_ROOT` (default `~/VDO`; บน Windows = `%USERPROFILE%\VDO`), `NO_COLOR`
 

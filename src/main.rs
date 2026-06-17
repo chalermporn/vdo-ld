@@ -1,16 +1,16 @@
 // vdo-dl — CLI (บางๆ ครอบ core ใน src/lib.rs)
 //
 // Usage:
-//   vdo-dl <URL>                      โหลดคุณภาพสูงสุดไปพักที่ ~/VDO/tmp/ (พิมพ์ path ออกมา)
-//   vdo-dl <URL> "ชื่อเรื่อง"          โหลด + ตั้งชื่อ + วางที่ ~/VDO/ยังไม่จัดหมวด/
-//   vdo-dl <URL> "ชื่อเรื่อง" "หมวด"   โหลด + ตั้งชื่อ + วางที่ ~/VDO/<หมวด>/
-//   vdo-dl -F <URL>                   ดูตาราง format ที่มี (ไม่โหลด)
-//   vdo-dl update                     อัปเดต yt-dlp (+ ffmpeg บน Windows) ที่ bundle ไว้
+//   vdo-dl [--audio] [--quality N] <URL> ["ชื่อเรื่อง"] ["หมวด"]
+//   vdo-dl -F <URL>        ดูตาราง format ที่มี (ไม่โหลด)
+//   vdo-dl update          อัปเดต yt-dlp (+ ffmpeg บน Windows) ที่ bundle ไว้
 
 use std::env;
 use std::process::Command;
+use std::sync::atomic::AtomicBool;
 use vdo_dl::{
-    download, ensure_tools, file_into, human_size, update, vdo_root, verify, ytdlp_path, VResult,
+    download, ensure_tools, file_into, human_size, update, vdo_root, verify, ytdlp_path,
+    DownloadOpts, VResult,
 };
 
 fn color_on() -> bool {
@@ -38,14 +38,23 @@ const USAGE: &str = "\
 vdo-dl — โหลดวิดีโอคุณภาพสูงสุด แล้วจัดเข้า ~/VDO/
 
 Usage:
-  vdo-dl <URL>                      โหลด → พักที่ ~/VDO/tmp/ (พิมพ์ path)
-  vdo-dl <URL> \"ชื่อเรื่อง\"          โหลด + ตั้งชื่อ → ~/VDO/ยังไม่จัดหมวด/
-  vdo-dl <URL> \"ชื่อเรื่อง\" \"หมวด\"   โหลด + ตั้งชื่อ → ~/VDO/<หมวด>/
-  vdo-dl -F <URL>                   ดูตาราง format ที่มี (ไม่โหลด)
-  vdo-dl update                     อัปเดต yt-dlp (+ ffmpeg บน Windows) ที่ bundle ไว้
+  vdo-dl [--audio] [--quality N] <URL> [\"ชื่อเรื่อง\"] [\"หมวด\"]
+  vdo-dl -F <URL>        ดูตาราง format ที่มี (ไม่โหลด)
+  vdo-dl update          อัปเดต yt-dlp (+ ffmpeg บน Windows) ที่ bundle ไว้
 
-ครั้งแรกที่รัน ถ้าเครื่องไม่มี yt-dlp/ffmpeg จะโหลดมาเก็บเองที่ <data>/vdo-dl/bin/
-(ไม่ต้องลงเพิ่มเอง). Env: VDO_ROOT, VDO_BIN, NO_COLOR";
+Options:
+  --audio          โหลดเสียงอย่างเดียว (mp3)
+  --quality N      จำกัดความสูงสูงสุด เช่น 1080, 720 (ไม่ใส่ = สูงสุด)
+
+ครั้งแรกที่รัน ถ้าเครื่องไม่มี yt-dlp/ffmpeg จะโหลดมาเก็บเองที่ <data>/vdo-dl/bin/.
+Env: VDO_ROOT, VDO_BIN, NO_COLOR";
+
+fn parse_quality(q: &str) -> Option<u32> {
+    match q.trim().to_lowercase().as_str() {
+        "best" | "max" | "สูงสุด" | "" => None,
+        s => s.trim_end_matches('p').parse::<u32>().ok(),
+    }
+}
 
 fn run() -> VResult<()> {
     let args: Vec<String> = env::args().skip(1).collect();
@@ -69,14 +78,32 @@ fn run() -> VResult<()> {
         _ => {}
     }
 
-    let url = &args[0];
-    let title = args.get(1).map(|s| s.as_str()).unwrap_or("");
-    let category = args.get(2).map(|s| s.as_str()).unwrap_or("");
+    // แยก flag กับ positional
+    let mut opts = DownloadOpts::default();
+    let mut pos: Vec<&str> = vec![];
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "--audio" => opts.audio = true,
+            "--quality" => opts.max_height = it.next().and_then(|q| parse_quality(q)),
+            s if s.starts_with("--quality=") => opts.max_height = parse_quality(&s[10..]),
+            s => pos.push(s),
+        }
+    }
+
+    let url = *pos.first().ok_or("ใส่ URL: vdo-dl <URL> [\"ชื่อเรื่อง\"] [\"หมวด\"]")?;
+    let title = pos.get(1).copied().unwrap_or("");
+    let category = pos.get(2).copied().unwrap_or("");
 
     let tools = ensure_tools(&|m| info(m))?;
-    info("กำลังโหลดคุณภาพสูงสุด (bv*+ba → merge mp4, ไม่ re-encode) ...");
+    info(if opts.audio {
+        "กำลังโหลดเสียง (mp3) ..."
+    } else {
+        "กำลังโหลดคุณภาพสูงสุด (bv*+ba → merge mp4, ไม่ re-encode) ..."
+    });
 
-    let file = download(&tools, url, &vdo_root().join("tmp"), &|pct, line| {
+    let cancel = AtomicBool::new(false);
+    let file = download(&tools, url, &vdo_root().join("tmp"), &opts, &cancel, &|pct, line| {
         if pct >= 0.0 {
             eprint!("\r{}", paint("36", &format!("  {:>5.1}%", pct)));
         } else {

@@ -10,8 +10,17 @@ use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 pub type VResult<T> = Result<T, String>;
+
+/// ตัวเลือกการโหลด: เสียงอย่างเดียวไหม + จำกัดความสูงสูงสุด (None = สูงสุด)
+#[derive(Clone, Copy, Default)]
+pub struct DownloadOpts {
+    pub audio: bool,
+    pub max_height: Option<u32>,
+}
 
 /// callback รับข้อความสถานะ (เช่น "โหลด yt-dlp ครั้งแรก…")
 pub type Log<'a> = dyn Fn(&str) + Sync + 'a;
@@ -333,17 +342,46 @@ fn ffmpeg_location_arg(cmd: &mut Command, ffmpeg: &Path) {
     }
 }
 
-/// โหลดคุณภาพสูงสุด → merge mp4. progress มาทาง stderr (เป็น "PROG:<pct>"), path มาทาง stdout.
-pub fn download(tools: &Tools, url: &str, tmp: &Path, on: &Progress) -> VResult<PathBuf> {
+/// kill process ตาม pid (ใช้ตอนยกเลิกโหลด)
+fn kill_pid(pid: u32) {
+    #[cfg(windows)]
+    let _ = Command::new("taskkill")
+        .args(["/PID", &pid.to_string(), "/T", "/F"])
+        .output();
+    #[cfg(not(windows))]
+    let _ = Command::new("kill").arg(pid.to_string()).output();
+}
+
+/// โหลดตาม opts → (วิดีโอ merge mp4 / เสียง mp3). progress มาทาง stderr ("PROG:<pct>"), path ทาง stdout.
+/// `cancel` ตั้ง true เมื่อไรก็ได้เพื่อยกเลิก (watcher จะ kill yt-dlp).
+pub fn download(
+    tools: &Tools,
+    url: &str,
+    tmp: &Path,
+    opts: &DownloadOpts,
+    cancel: &AtomicBool,
+    on: &Progress,
+) -> VResult<PathBuf> {
     fs::create_dir_all(tmp).map_err(|e| format!("สร้าง tmp ไม่ได้: {}", e))?;
-    let out_template = tmp.join("%(id)s.%(ext)s");
+    // ชื่อไฟล์จดจำง่าย: ใช้ชื่อวิดีโอจริง (จำกัด 150 ไบต์) ถ้าไม่มีค่อย fallback เป็น id
+    let out_template = tmp.join("%(title,id).150B.%(ext)s");
 
     let mut cmd = Command::new(&tools.yt_dlp);
-    cmd.args(["-f", "bv*+ba/b", "--merge-output-format", "mp4", "--newline"])
+    cmd.arg("--newline")
         .args(["--progress-template", "PROG:%(progress._percent_str)s"])
         .arg("-o")
         .arg(&out_template)
         .args(["--print", "after_move:filepath"]);
+
+    if opts.audio {
+        cmd.args(["-x", "--audio-format", "mp3"]);
+    } else {
+        let fmt = match opts.max_height {
+            Some(h) => format!("bv*[height<={h}]+ba/b[height<={h}]"),
+            None => "bv*+ba/b".to_string(),
+        };
+        cmd.args(["-f", &fmt, "--merge-output-format", "mp4"]);
+    }
     ffmpeg_location_arg(&mut cmd, &tools.ffmpeg);
 
     let mut child = cmd
@@ -353,12 +391,24 @@ pub fn download(tools: &Tools, url: &str, tmp: &Path, on: &Progress) -> VResult<
         .spawn()
         .map_err(|e| format!("รัน yt-dlp ไม่ได้: {}", e))?;
 
+    let pid = child.id();
     let stderr = child.stderr.take().unwrap();
     let stdout = child.stdout.take().unwrap();
     let mut last_path = String::new();
+    let done = AtomicBool::new(false);
 
     std::thread::scope(|s| {
-        // อ่าน stderr: progress + สถานะ
+        // watcher: ยกเลิก → kill yt-dlp
+        s.spawn(|| {
+            while !done.load(Ordering::Relaxed) {
+                if cancel.load(Ordering::Relaxed) {
+                    kill_pid(pid);
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(150));
+            }
+        });
+        // stderr: progress + สถานะ
         s.spawn(|| {
             for line in BufReader::new(stderr).lines().map_while(Result::ok) {
                 let t = line.trim();
@@ -370,16 +420,20 @@ pub fn download(tools: &Tools, url: &str, tmp: &Path, on: &Progress) -> VResult<
                 }
             }
         });
-        // อ่าน stdout: path ของไฟล์ผลลัพธ์ (บรรทัด non-empty สุดท้าย)
+        // stdout: path ของไฟล์ผลลัพธ์ (บรรทัด non-empty สุดท้าย)
         for line in BufReader::new(stdout).lines().map_while(Result::ok) {
             let t = line.trim();
             if !t.is_empty() {
                 last_path = t.to_string();
             }
         }
+        done.store(true, Ordering::Relaxed);
     });
 
     let status = child.wait().map_err(|e| format!("yt-dlp พัง: {}", e))?;
+    if cancel.load(Ordering::Relaxed) {
+        return Err("ยกเลิกการโหลด".into());
+    }
     if !status.success() {
         return Err("yt-dlp โหลดไม่สำเร็จ".into());
     }
@@ -442,10 +496,11 @@ pub fn verify(ffprobe: &Path, file: &Path) -> VideoInfo {
 }
 
 // ---------- file it ----------
-/// ย้ายไฟล์เข้า ~/VDO/<category>/<title>.mp4 — คืน path ปลายทาง
+/// ย้ายไฟล์เข้า ~/VDO/<category>/<title>.<ext จริงของต้นทาง> — คืน path ปลายทาง
 pub fn file_into(src: &Path, category: &str, title: &str) -> VResult<PathBuf> {
     let cat = if category.trim().is_empty() { "ยังไม่จัดหมวด" } else { category.trim() };
-    let dest = vdo_root().join(cat).join(format!("{}.mp4", sanitize_title(title)));
+    let ext = src.extension().and_then(|e| e.to_str()).unwrap_or("mp4");
+    let dest = vdo_root().join(cat).join(format!("{}.{}", sanitize_title(title), ext));
     if let Some(parent) = dest.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("สร้างโฟลเดอร์ปลายทางไม่ได้: {}", e))?;
     }
@@ -478,4 +533,92 @@ pub fn update(log: &Log) -> VResult<()> {
         provision_ffmpeg_bundle(log)?;
     }
     Ok(())
+}
+
+// ---------- meta / OS helpers ----------
+/// ดึง (ชื่อเรื่อง, URL รูป thumbnail) จาก URL โดยไม่โหลดวิดีโอ
+pub fn probe_meta(url: &str) -> VResult<(String, String)> {
+    let yt = find_tool("yt-dlp", "--version").ok_or("ยังไม่มี yt-dlp")?;
+    let out = Command::new(yt)
+        .args(["--skip-download", "--no-warnings", "--no-playlist"])
+        .args(["--print", "%(title)s", "--print", "%(thumbnail)s"])
+        .arg(url)
+        .output()
+        .map_err(|e| format!("รัน yt-dlp ไม่ได้: {}", e))?;
+    let text = String::from_utf8_lossy(&out.stdout);
+    let mut lines = text.lines().filter(|l| !l.trim().is_empty());
+    let title = lines.next().unwrap_or("").trim().to_string();
+    let thumb = lines.next().unwrap_or("").trim().to_string();
+    if title.is_empty() {
+        return Err("ดึงข้อมูลวิดีโอไม่ได้ (URL ใช้ไม่ได้?)".into());
+    }
+    Ok((title, thumb))
+}
+
+/// ลบไฟล์ในดิสก์ (เฉพาะที่อยู่ใต้ ~/VDO เพื่อกันลบผิด)
+pub fn delete_file(path: &str) -> VResult<()> {
+    let p = Path::new(path);
+    if !p.exists() {
+        return Ok(()); // หายไปแล้วก็ถือว่าสำเร็จ
+    }
+    let root = vdo_root();
+    let safe = p
+        .canonicalize()
+        .ok()
+        .zip(root.canonicalize().ok())
+        .map(|(f, r)| f.starts_with(&r))
+        .unwrap_or(false);
+    if !safe {
+        return Err("ลบได้เฉพาะไฟล์ใน ~/VDO เท่านั้น".into());
+    }
+    fs::remove_file(p).map_err(|e| format!("ลบไฟล์ไม่ได้: {}", e))
+}
+
+/// เปิด file manager แล้วเลือกไฟล์นั้น (mac: Finder, win: Explorer, linux: เปิดโฟลเดอร์)
+pub fn reveal_path(path: &str) -> VResult<()> {
+    let p = Path::new(path);
+    if !p.exists() {
+        return Err("ไม่พบไฟล์".into());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = Command::new("open").arg("-R").arg(path).status();
+    }
+    #[cfg(windows)]
+    {
+        // explorer คืน exit code ≠ 0 แม้สำเร็จ → ไม่เช็ค status
+        let _ = Command::new("explorer").arg(format!("/select,{}", path)).status();
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let dir = p.parent().unwrap_or(p);
+        let _ = Command::new("xdg-open").arg(dir).status();
+    }
+    Ok(())
+}
+
+/// อ่านข้อความจาก clipboard ผ่าน OS tool — ไม่มี/ล้มเหลว = คืนค่าว่าง
+pub fn read_clipboard() -> String {
+    let try_cmd = |prog: &str, args: &[&str]| -> Option<String> {
+        let out = Command::new(prog).args(args).output().ok()?;
+        if out.status.success() {
+            Some(String::from_utf8_lossy(&out.stdout).trim().to_string())
+        } else {
+            None
+        }
+    };
+    #[cfg(target_os = "macos")]
+    {
+        try_cmd("pbpaste", &[]).unwrap_or_default()
+    }
+    #[cfg(windows)]
+    {
+        try_cmd("powershell", &["-NoProfile", "-Command", "Get-Clipboard"]).unwrap_or_default()
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        try_cmd("wl-paste", &[])
+            .or_else(|| try_cmd("xclip", &["-selection", "clipboard", "-o"]))
+            .unwrap_or_default()
+    }
 }
