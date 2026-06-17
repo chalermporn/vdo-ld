@@ -1,0 +1,22 @@
+[package]
+name = "vdo-dl"
+version = "0.1.0"
+edition = "2021"
+description = "ส่งลิงค์วิดีโอ → ได้ไฟล์คุณภาพสูงสุด แล้วจัดเข้า ~/VDO/ (ห่อ yt-dlp + ffmpeg)"
+
+[lib]
+name = "vdo_dl"
+path = "src/lib.rs"
+
+[[bin]]
+name = "vdo-dl"
+path = "src/main.rs"
+
+[workspace]
+members = ["src-tauri"]
+
+# โปรไฟล์ release ใช้ทั้ง workspace (CLI + Tauri app)
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true

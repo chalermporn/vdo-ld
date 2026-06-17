@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="th" class="light">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>vdo-dl — Video Downloader</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* mood & tone: codemunha.com — ฟ้า #0b88ee primary, เขียว #38cb89 secondary, ฟอนต์ Quicksand */
+  :root{
+    --green:#0b88ee; --green-d:#0a6fc0; --green-l:#4dafff; --ok:#38cb89; --ok-d:#2aa86d;
+    --bg:#f3f8fd; --panel:#ffffff; --line:#e2ebf3; --ink:#1f2a36;
+    --muted:#8a96a3; --hover:#eef5fc; --field:#f7fbfe;
+  }
+  html.dark{
+    --green:#2c9af2; --green-d:#0b88ee; --green-l:#4dafff; --ok:#38cb89; --ok-d:#34c082;
+    --bg:#10171f; --panel:#16202b; --line:#243240; --ink:#e6edf4;
+    --muted:#7e8c9a; --hover:#1c2835; --field:#131c25;
+  }
+  body{font-family:'Quicksand','Segoe UI',-apple-system,BlinkMacSystemFont,sans-serif;font-weight:500;background:#cdd9e4;}
+  html.dark body{background:#0a0f15;}
+  .ink{color:var(--ink)} .muted{color:var(--muted)}
+  .panel{background:var(--panel)} .line{border-color:var(--line)}
+  .pill{transition:.15s} .pill:hover{background:var(--hover)}
+  .btn-green{background:linear-gradient(180deg,var(--green-l),var(--green));box-shadow:0 1px 2px rgba(0,0,0,.18);}
+  .btn-green:hover{background:linear-gradient(180deg,var(--green),var(--green-d));}
+  .bar-fill{background:linear-gradient(90deg,var(--green-l),var(--green));}
+  .win{box-shadow:0 24px 60px -12px rgba(0,0,0,.45);}
+  input,select{background:var(--field);color:var(--ink);border:1px solid var(--line);outline:none}
+  input:focus,select:focus{border-color:var(--green)}
+  [data-lucide]{width:18px;height:18px}
+</style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-6">
+
+<div class="win w-full max-w-[900px] rounded-xl overflow-hidden border line" style="background:var(--bg)">
+
+  <!-- title bar -->
+  <div class="flex items-center gap-3 px-4 h-10 border-b line" style="background:var(--panel)">
+    <div class="flex gap-2">
+      <span class="w-3 h-3 rounded-full" style="background:#ff5f57"></span>
+      <span class="w-3 h-3 rounded-full" style="background:#febc2e"></span>
+      <span class="w-3 h-3 rounded-full" style="background:#28c840"></span>
+    </div>
+    <div class="flex items-center gap-2 mx-auto">
+      <span class="grid place-items-center w-5 h-5 rounded-full" style="background:var(--green)">
+        <i data-lucide="cloud" style="width:13px;height:13px;color:#fff"></i>
+      </span>
+      <span class="text-[13px] font-semibold ink">vdo-dl — Video Downloader</span>
+    </div>
+    <div class="w-10"></div>
+  </div>
+
+  <!-- toolbar -->
+  <div class="flex items-center gap-3 px-4 py-3 border-b line flex-wrap" style="background:var(--panel)">
+    <button onclick="toggleComposer()" class="btn-green text-white font-semibold text-[13px] rounded-lg pl-3 pr-4 py-2 flex items-center gap-2">
+      <i data-lucide="clipboard-paste" style="color:#fff"></i> วางลิงก์
+    </button>
+    <button id="smart" title="Smart Mode — โหลดด้วยค่าตั้งทันที"
+      class="grid place-items-center w-9 h-9 rounded-lg border line pill"><i data-lucide="lightbulb"></i></button>
+
+    <div class="h-6 w-px" style="background:var(--line)"></div>
+
+    <div class="flex items-center gap-1 text-[13px] flex-wrap">
+      <span class="px-2 py-1.5 muted">โหลด <b class="ink">วิดีโอ</b></span>
+      <span class="px-2 py-1.5 muted">คุณภาพ <b class="ink">สูงสุด</b></span>
+      <label class="flex items-center gap-1 muted">เก็บที่
+        <select id="cat" class="rounded-md px-2 py-1 text-[13px]"><option>ยังไม่จัดหมวด</option></select>
+      </label>
+    </div>
+
+    <div class="ml-auto flex items-center gap-1">
+      <button onclick="doUpdate()" class="grid place-items-center w-9 h-9 rounded-lg pill" title="อัปเดต yt-dlp/ffmpeg"><i data-lucide="refresh-cw"></i></button>
+      <button onclick="toggleTheme()" class="grid place-items-center w-9 h-9 rounded-lg pill" title="สลับธีม"><i data-lucide="moon" id="theme-i"></i></button>
+      <button class="grid place-items-center w-9 h-9 rounded-lg pill" title="ตั้งค่า"><i data-lucide="settings"></i></button>
+    </div>
+  </div>
+
+  <!-- composer -->
+  <div id="composer" class="hidden px-4 py-3 border-b line" style="background:var(--field)">
+    <div class="flex flex-col gap-2 max-w-2xl mx-auto">
+      <div class="flex items-center gap-2">
+        <i data-lucide="link" class="muted"></i>
+        <input id="url" placeholder="วาง URL วิดีโอ (YouTube, Facebook, TikTok, …)" class="flex-1 rounded-lg px-3 py-2 text-[13px]" />
+      </div>
+      <div class="flex items-center gap-2">
+        <i data-lucide="type" class="muted"></i>
+        <input id="title" placeholder="ตั้งชื่อเรื่อง (เว้นว่าง = พักไว้ที่ tmp)" class="flex-1 rounded-lg px-3 py-2 text-[13px]" />
+        <button onclick="go()" class="btn-green text-white text-[13px] font-semibold rounded-lg px-4 py-2 flex items-center gap-1.5">
+          <i data-lucide="download" style="color:#fff"></i> โหลด
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- body -->
+  <div class="px-4 py-4" style="min-height:360px">
+    <div id="empty" class="hidden flex-col items-center justify-center text-center py-16">
+      <p class="muted text-sm">เริ่มโหลดง่าย ๆ</p>
+      <h1 class="text-2xl font-semibold ink mt-1">วางลิงก์วิดีโอลงในแอป</h1>
+      <p class="muted text-xs mt-3">กดปุ่ม “วางลิงก์” ด้านบน แล้ววาง URL</p>
+    </div>
+
+    <div id="list" class="space-y-2">
+      <div class="flex items-center justify-between px-1 mb-1">
+        <div class="flex items-center gap-1 text-[13px]">
+          <button class="rounded-md px-3 py-1.5 font-medium" style="background:var(--green);color:#fff">ทั้งหมด</button>
+          <button class="pill rounded-md px-3 py-1.5 muted">วิดีโอ</button>
+          <button class="pill rounded-md px-3 py-1.5 muted">เสียง</button>
+        </div>
+        <span id="rootlbl" class="muted text-xs">~/VDO/</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex items-center justify-between px-4 h-9 border-t line text-xs muted" style="background:var(--panel)">
+    <span id="stat">พร้อม · yt-dlp + ffmpeg bundled</span>
+    <span class="flex items-center gap-1"><i data-lucide="hard-drive" style="width:14px;height:14px"></i> <span id="rootbar">~/VDO</span></span>
+  </div>
+</div>
+
+<script>
+const T = window.__TAURI__;
+const invoke = T?.core?.invoke?.bind(T.core);
+const listen = T?.event?.listen?.bind(T.event);
+const inTauri = !!invoke;
+
+const rows = [];
+let activeRow = null;
+let uid = 1;
+
+function setStat(t){ document.getElementById('stat').textContent = t; }
+
+function rowHtml(r){
+  const badge = r.state==='done'
+    ? `<span class="text-[11px] px-2 py-0.5 rounded-full" style="background:rgba(56,203,137,.16);color:var(--ok-d)">เสร็จ</span>`
+    : r.state==='merge'
+    ? `<span class="text-[11px] px-2 py-0.5 rounded-full" style="background:rgba(11,136,238,.14);color:var(--green-d)">merge…</span>`
+    : r.state==='error'
+    ? `<span class="text-[11px] px-2 py-0.5 rounded-full" style="background:rgba(220,38,38,.14);color:#dc2626">ผิดพลาด</span>`
+    : `<span class="text-[11px] muted">${Math.round(r.pct)}%</span>`;
+  const progress = (r.state==='done'||r.state==='error') ? '' : `
+    <div class="h-1.5 rounded-full mt-2 overflow-hidden" style="background:var(--line)">
+      <div class="bar-fill h-full rounded-full" style="width:${r.state==='merge'?100:r.pct}%;transition:width .3s"></div>
+    </div>`;
+  const sub = r.state==='error' ? r.err : `${r.cat} · ${r.size} · mp4`;
+  const action = r.state==='done'
+    ? `<button class="pill grid place-items-center w-8 h-8 rounded-lg" title="${r.path||''}"><i data-lucide="folder-open"></i></button>`
+    : r.state==='error'
+    ? `<button class="pill grid place-items-center w-8 h-8 rounded-lg" title="ลองใหม่"><i data-lucide="rotate-cw"></i></button>`
+    : `<i data-lucide="loader" class="animate-spin muted" style="width:18px"></i>`;
+  return `<div class="flex items-center gap-3 panel border line rounded-xl p-3">
+    <div class="relative w-20 h-12 rounded-lg shrink-0 overflow-hidden grid place-items-center" style="background:${r.thumb}22">
+      <i data-lucide="play" style="color:${r.thumb};width:20px;height:20px"></i>
+      <span class="absolute bottom-0.5 right-0.5 text-[9px] px-1 rounded text-white" style="background:rgba(0,0,0,.6)">${r.res}</span>
+    </div>
+    <div class="flex-1 min-w-0">
+      <div class="flex items-center gap-2"><p class="ink text-[13px] font-medium truncate">${r.title}</p>${badge}</div>
+      <p class="muted text-xs mt-0.5 truncate">${sub}</p>
+      ${progress}
+    </div>
+    <div class="shrink-0 grid place-items-center w-8 h-8">${action}</div>
+  </div>`;
+}
+
+function render(){
+  const list=document.getElementById('list'), empty=document.getElementById('empty');
+  list.querySelectorAll('.dlrow').forEach(e=>e.remove());
+  if(rows.length===0){ empty.classList.remove('hidden'); empty.classList.add('flex'); list.classList.add('hidden'); }
+  else{ empty.classList.add('hidden'); list.classList.remove('hidden');
+    rows.forEach(r=>{ const d=document.createElement('div'); d.className='dlrow';
+      d.innerHTML=rowHtml(r); list.appendChild(d.firstElementChild); }); }
+  lucide.createIcons();
+}
+
+function toggleComposer(){
+  const c=document.getElementById('composer'); c.classList.toggle('hidden');
+  if(!c.classList.contains('hidden')) document.getElementById('url').focus();
+}
+
+async function go(){
+  const url=document.getElementById('url').value.trim();
+  const title=document.getElementById('title').value.trim();
+  const cat=document.getElementById('cat').value;
+  if(!url){ document.getElementById('url').focus(); return; }
+
+  const row={id:uid++, title:title||'(ยังไม่ตั้งชื่อ)', cat, res:'—', size:'—', state:'dl', pct:0, thumb:'#0b88ee'};
+  rows.unshift(row); activeRow=row; render();
+  document.getElementById('url').value=''; document.getElementById('title').value='';
+
+  if(!inTauri){ return demo(row); }   // เปิดในเบราว์เซอร์เฉย ๆ → เดโม
+
+  try{
+    const res=await invoke('download_video',{url, title, category:cat});
+    row.state='done';
+    row.res = res.height && res.height!=='?' ? res.height+'p' : '—';
+    row.size = res.size; row.path=res.path;
+    setStat('พร้อม · yt-dlp + ffmpeg bundled');
+  }catch(e){ row.state='error'; row.err=String(e); setStat('เกิดข้อผิดพลาด'); }
+  activeRow=null; render();
+}
+
+async function doUpdate(){
+  if(!inTauri){ setStat('(เดโม) อัปเดตได้เฉพาะในแอปจริง'); return; }
+  setStat('กำลังอัปเดตเครื่องมือ…');
+  try{ await invoke('update_tools'); setStat('อัปเดตเครื่องมือเสร็จแล้ว'); }
+  catch(e){ setStat('อัปเดตไม่สำเร็จ: '+e); }
+}
+
+function toggleTheme(){ const h=document.documentElement; h.classList.toggle('dark'); h.classList.toggle('light');
+  document.getElementById('theme-i').setAttribute('data-lucide', h.classList.contains('dark')?'sun':'moon'); lucide.createIcons(); }
+
+function demo(row){
+  setStat('(เดโม) กำลังโหลด…');
+  const t=setInterval(()=>{ row.pct+=Math.ceil(Math.random()*18);
+    if(row.pct>=100){ row.pct=100; row.state='merge'; clearInterval(t);
+      setTimeout(()=>{ row.state='done'; row.res='1080p'; row.size='187 MB';
+        setStat('พร้อม · yt-dlp + ffmpeg bundled'); render(); },1200); }
+    render();
+  },350);
+}
+
+// ---- wire Tauri events + initial data ----
+async function init(){
+  document.getElementById('smart').style.background='rgba(11,136,238,.14)';
+  document.getElementById('smart').style.color='var(--green-d)';
+  render();
+  if(!inTauri){ setStat('(เดโม ในเบราว์เซอร์ — เปิดผ่านแอปเพื่อโหลดจริง)'); return; }
+
+  try{
+    const root=await invoke('vdo_root');
+    document.getElementById('rootlbl').textContent=root+'/';
+    document.getElementById('rootbar').textContent=root;
+    const cats=await invoke('categories');
+    const sel=document.getElementById('cat');
+    sel.innerHTML='';
+    (cats.length?cats:['ยังไม่จัดหมวด']).forEach(c=>{ const o=document.createElement('option'); o.textContent=c; sel.appendChild(o); });
+  }catch(e){ console.error(e); }
+
+  listen('vdo://progress', e=>{ if(activeRow && activeRow.state==='dl'){ activeRow.pct=e.payload.pct>=0?e.payload.pct:activeRow.pct; render(); } });
+  listen('vdo://status', e=>{ const t=e.payload.text||''; setStat(t);
+    if(activeRow && /merge|ตรวจไฟล์/.test(t)){ activeRow.state='merge'; render(); } });
+}
+init();
+</script>
+</body>
+</html>
