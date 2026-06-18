@@ -271,7 +271,24 @@ fn runs(tool: &Path, arg: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// หา tool: managed bin ก่อน → PATH → None
+/// ไดเรกทอรีมาตรฐานที่ tool มักอยู่ — เผื่อ GUI app (เปิดจาก Finder) ที่ได้ PATH แคบ
+/// (`/usr/bin:/bin:/usr/sbin:/sbin`) ไม่มี Homebrew. ต้องหาเจอด้วย absolute path
+fn extra_tool_dirs() -> &'static [&'static str] {
+    #[cfg(target_os = "macos")]
+    {
+        &["/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin"]
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        &["/usr/local/bin", "/usr/bin", "/snap/bin"]
+    }
+    #[cfg(windows)]
+    {
+        &[]
+    }
+}
+
+/// หา tool: managed bin → PATH → ไดเรกทอรีมาตรฐาน (Homebrew ฯลฯ) → None
 pub fn find_tool(name: &str, version_arg: &str) -> Option<PathBuf> {
     let managed = bin_dir().join(exe(name));
     if managed.is_file() {
@@ -279,6 +296,13 @@ pub fn find_tool(name: &str, version_arg: &str) -> Option<PathBuf> {
     }
     if runs(Path::new(name), version_arg) {
         return Some(PathBuf::from(name));
+    }
+    // GUI app บน macOS ได้ PATH แคบจาก launchd → /opt/homebrew/bin หาไม่เจอผ่าน PATH
+    for dir in extra_tool_dirs() {
+        let p = Path::new(dir).join(exe(name));
+        if p.is_file() && runs(&p, version_arg) {
+            return Some(p);
+        }
     }
     None
 }
