@@ -25,14 +25,26 @@ struct StatusEvent {
 #[derive(Clone, Serialize)]
 struct ProgressEvent {
     id: u64,
+    index: Option<u32>, // ลำดับใน playlist (None = คลิปเดี่ยว) → map ไปแถวลูก (Option B)
     pct: f32,
     text: String,
+}
+
+/// item หนึ่งใน playlist โหลด+ย้ายเสร็จ (อัปเดตแถวลูกราย clip)
+#[derive(Clone, Serialize)]
+struct ItemEvent {
+    id: u64,
+    index: Option<u32>,
+    path: String,
+    height: String,
+    size: String,
 }
 
 #[derive(Clone, Serialize)]
 struct DownloadResult {
     id: u64,
-    path: String,
+    path: String,  // เดี่ยว = path ไฟล์; playlist = path โฟลเดอร์
+    count: u32,    // เดี่ยว = 1; playlist = จำนวนไฟล์ที่ได้
     width: String,
     height: String,
     vcodec: String,
@@ -44,6 +56,13 @@ struct DownloadResult {
 struct Meta {
     title: String,
     thumbnail: String,
+}
+
+/// ข้อมูล playlist สำหรับ pre-create แถวลูกใน GUI
+#[derive(Clone, Serialize)]
+struct PlaylistInfo {
+    title: String,
+    entries: Vec<String>,
 }
 
 /// หมวดที่มีอยู่ใน ~/VDO/ (ทำ dropdown)
@@ -63,6 +82,13 @@ fn vdo_root() -> String {
 fn probe_meta(url: String) -> Result<Meta, String> {
     let (title, thumbnail) = core::probe_meta(&url)?;
     Ok(Meta { title, thumbnail })
+}
+
+/// ดึงข้อมูล playlist (ชื่อ + รายชื่อคลิป) เพื่อ pre-create แถวลูก (Option B)
+#[tauri::command]
+fn playlist_probe(url: String) -> Result<PlaylistInfo, String> {
+    let (title, entries) = core::probe_playlist(&url)?;
+    Ok(PlaylistInfo { title, entries })
 }
 
 /// อ่าน URL จาก clipboard (ปุ่ม "วางลิงก์")
@@ -107,6 +133,7 @@ async fn download_video(
     audio_quality: Option<u8>,
     subs: bool,
     sub_langs: String,
+    playlist: bool,
 ) -> Result<DownloadResult, String> {
     let map = jobs.0.clone(); // clone Arc ก่อน await (ไม่ถือ State ข้าม await)
     let flag = Arc::new(AtomicBool::new(false));
@@ -123,10 +150,68 @@ async fn download_video(
         let tools = core::ensure_tools(&status)?;
         status("กำลังโหลด…");
 
+        // playlist: รู้ subfolder ก่อนเริ่ม เพื่อ file แต่ละ item ได้ทันที (live ไม่รอจบทั้งชุด)
+        let subfolder = if playlist {
+            if !title.trim().is_empty() {
+                title.clone()
+            } else {
+                core::probe_playlist(&url).map(|(t, _)| t).unwrap_or_else(|_| "playlist".into())
+            }
+        } else {
+            String::new()
+        };
+        // เก็บ path ปลายทางที่ file แล้ว (callback เขียน, นอก loop อ่านไปทำ .m3u)
+        let dests: Arc<Mutex<Vec<std::path::PathBuf>>> = Arc::new(Mutex::new(Vec::new()));
+
+        // event callback: progress/status แนบ index; playlist → file ทันทีตอน ItemDone แล้วแจ้งแถวลูก
         let on = {
             let app = app.clone();
-            move |pct: f32, line: &str| {
-                let _ = app.emit("vdo://progress", ProgressEvent { id, pct, text: line.to_string() });
+            let ffprobe = tools.ffprobe.clone();
+            let category = category.clone();
+            let subfolder = subfolder.clone();
+            let dests = dests.clone();
+            move |ev: core::DlEvent| match ev {
+                core::DlEvent::Progress { index, pct } => {
+                    let _ = app.emit(
+                        "vdo://progress",
+                        ProgressEvent { id, index, pct, text: String::new() },
+                    );
+                }
+                core::DlEvent::Status { line, .. } => {
+                    let _ = app.emit("vdo://status", StatusEvent { id, text: line.to_string() });
+                }
+                core::DlEvent::ItemDone { index, path } => {
+                    if !playlist {
+                        // คลิปเดี่ยว: flip bar เต็ม (filing ทำหลัง download คืน)
+                        let _ = app.emit(
+                            "vdo://progress",
+                            ProgressEvent { id, index, pct: 100.0, text: String::new() },
+                        );
+                        return;
+                    }
+                    match core::file_into_dir(&path, &category, &subfolder) {
+                        Ok(dest) => {
+                            let v = core::verify(&ffprobe, &dest);
+                            let _ = app.emit(
+                                "vdo://item",
+                                ItemEvent {
+                                    id,
+                                    index,
+                                    path: dest.display().to_string(),
+                                    height: v.height,
+                                    size: core::human_size(v.size_bytes),
+                                },
+                            );
+                            dests.lock().unwrap().push(dest);
+                        }
+                        Err(e) => {
+                            let _ = app.emit(
+                                "vdo://status",
+                                StatusEvent { id, text: format!("ย้ายไฟล์ไม่ได้: {}", e) },
+                            );
+                        }
+                    }
+                }
             }
         };
         let opts = core::DownloadOpts {
@@ -137,21 +222,45 @@ async fn download_video(
             audio_quality,
             subs,
             sub_langs,
+            playlist,
         };
-        let file = core::download(&tools, &url, &core::vdo_root().join("tmp"), &opts, &flag, &on)?;
+        let items = core::download(&tools, &url, &core::vdo_root().join("tmp"), &opts, &flag, &on)?;
 
         let _ = app.emit("vdo://status", StatusEvent { id, text: "กำลัง merge / ตรวจไฟล์…".into() });
-        let v = core::verify(&tools.ffprobe, &file);
 
+        // playlist: file ทำใน callback แล้ว — เหลือเขียน .m3u + คืนสรุป
+        if playlist {
+            let dests = dests.lock().unwrap();
+            if dests.is_empty() {
+                return Err("ไม่ได้ไฟล์จาก playlist".into());
+            }
+            let dir = dests[0].parent().unwrap_or(&dests[0]).to_path_buf();
+            let _ = core::write_m3u(&dir, &subfolder, &dests);
+            return Ok::<DownloadResult, String>(DownloadResult {
+                id,
+                path: dir.display().to_string(),
+                count: dests.len() as u32,
+                width: String::new(),
+                height: String::new(),
+                vcodec: String::new(),
+                acodec: String::new(),
+                size: String::new(),
+            });
+        }
+
+        // วิดีโอเดี่ยว
+        let (_idx, file) = &items[0];
+        let v = core::verify(&tools.ffprobe, file);
         let final_path = if title.trim().is_empty() {
             file.clone()
         } else {
-            core::file_into(&file, &category, &title)?
+            core::file_into(file, &category, &title)?
         };
 
         Ok::<DownloadResult, String>(DownloadResult {
             id,
             path: final_path.display().to_string(),
+            count: 1,
             width: v.width,
             height: v.height,
             vcodec: v.vcodec,
@@ -197,6 +306,7 @@ pub fn run() {
             categories,
             vdo_root,
             probe_meta,
+            playlist_probe,
             clipboard,
             reveal,
             delete_file,

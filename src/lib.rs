@@ -74,6 +74,7 @@ pub struct DownloadOpts {
     pub audio_quality: Option<u8>,  // --audio-quality 0(best)..10 (None = ค่า default ของ yt-dlp)
     pub subs: bool,                 // ดาวน์โหลด+ฝังคำบรรยาย (เฉพาะวิดีโอ)
     pub sub_langs: String,          // ภาษาซับ เช่น "en,th" หรือ "all" (ว่าง = ข้าม แม้ subs=true)
+    pub playlist: bool,             // true = โหลดทั้ง playlist (default false = คลิปเดียว)
 }
 
 /// สร้าง args ของ yt-dlp สำหรับ format + subtitle (แยกเป็นฟังก์ชันบริสุทธิ์เพื่อ unit-test)
@@ -113,8 +114,19 @@ pub fn build_format_args(opts: &DownloadOpts) -> Vec<String> {
 
 /// callback รับข้อความสถานะ (เช่น "โหลด yt-dlp ครั้งแรก…")
 pub type Log<'a> = dyn Fn(&str) + Sync + 'a;
-/// callback รับความคืบหน้าโหลด: (percent 0..100, ข้อความดิบ). percent < 0 = บรรทัดสถานะเฉย ๆ
-pub type Progress<'a> = dyn Fn(f32, &str) + Sync + 'a;
+
+/// เหตุการณ์ระหว่างโหลด — index = ลำดับใน playlist (None = วิดีโอเดี่ยว/ไม่ใช่ playlist).
+/// รองรับ Option B: GUI map event กลับไปแถวลูกตาม index ได้.
+pub enum DlEvent<'a> {
+    /// ความคืบหน้าของ item ปัจจุบัน (percent 0..100)
+    Progress { index: Option<u32>, pct: f32 },
+    /// ข้อความสถานะ/คำเตือนดิบจาก yt-dlp
+    Status { index: Option<u32>, line: &'a str },
+    /// item หนึ่งโหลด+ย้ายเสร็จแล้ว (path ใน tmp)
+    ItemDone { index: Option<u32>, path: PathBuf },
+}
+/// callback รับ DlEvent ระหว่างโหลด (เรียกจากหลาย thread ได้ → ต้อง Sync)
+pub type OnEvent<'a> = dyn Fn(DlEvent) + Sync + 'a;
 
 pub struct Tools {
     pub yt_dlp: PathBuf,
@@ -441,7 +453,20 @@ fn kill_pid(pid: u32) {
     let _ = Command::new("kill").arg(pid.to_string()).output();
 }
 
-/// โหลดตาม opts → (วิดีโอ merge mp4 / เสียง mp3). progress มาทาง stderr ("PROG:<pct>"), path ทาง stdout.
+/// แปลงค่า playlist_index จาก yt-dlp ("NA"/ว่าง = ไม่ใช่ playlist) → Option<u32>
+fn parse_idx(s: &str) -> Option<u32> {
+    match s.trim() {
+        "" | "NA" => None,
+        n => n.parse().ok(),
+    }
+}
+
+/// โหลดตาม opts. คืน Vec ของ (playlist_index, path ใน tmp) ตามลำดับที่โหลดเสร็จ
+/// (วิดีโอเดี่ยว = 1 รายการ index=None; playlist = หลายรายการ). ส่ง DlEvent ระหว่างทาง.
+///
+/// Protocol (ผ่าน stdout, verify แล้ว — ดู Phase 2.0):
+///   PROG:::<percent>:::<playlist_index>   ความคืบหน้าต่อ item
+///   DONE:::<playlist_index>:::<filepath>  item โหลด+ย้ายเสร็จ
 /// `cancel` ตั้ง true เมื่อไรก็ได้เพื่อยกเลิก (watcher จะ kill yt-dlp).
 pub fn download(
     tools: &Tools,
@@ -449,21 +474,35 @@ pub fn download(
     tmp: &Path,
     opts: &DownloadOpts,
     cancel: &AtomicBool,
-    on: &Progress,
-) -> VResult<PathBuf> {
+    on: &OnEvent,
+) -> VResult<Vec<(Option<u32>, PathBuf)>> {
     fs::create_dir_all(tmp).map_err(|e| format!("สร้าง tmp ไม่ได้: {}", e))?;
-    // ชื่อไฟล์จดจำง่าย: ใช้ชื่อวิดีโอจริง (จำกัด 150 ไบต์) ถ้าไม่มีค่อย fallback เป็น id
-    let out_template = tmp.join("%(title,id).150B.%(ext)s");
+    // playlist: ใส่เลขลำดับนำหน้าชื่อไฟล์; เดี่ยว: ใช้ชื่อวิดีโอจริง (fallback id)
+    let out_template = if opts.playlist {
+        tmp.join("%(playlist_index)02d - %(title,id).120B.%(ext)s")
+    } else {
+        tmp.join("%(title,id).150B.%(ext)s")
+    };
 
     let mut cmd = Command::new(&tools.yt_dlp);
     // --progress: บังคับให้พ่น progress แม้ถูก pipe (ไม่ใช่ TTY) ไม่งั้น yt-dlp เงียบ
-    // หมายเหตุ: progress-template ออกที่ "stdout" (ปนกับ --print path) ไม่ใช่ stderr
+    // หมายเหตุ: progress-template + --print ออกที่ "stdout" (ไม่ใช่ stderr)
     cmd.arg("--newline")
         .arg("--progress")
-        .args(["--progress-template", "PROG:%(progress._percent_str)s"])
+        .args([
+            "--progress-template",
+            "PROG:::%(progress._percent_str)s:::%(info.playlist_index)s",
+        ])
         .arg("-o")
         .arg(&out_template)
-        .args(["--print", "after_move:filepath"]);
+        .args(["--print", "after_move:DONE:::%(playlist_index)s:::%(filepath)s"]);
+
+    if opts.playlist {
+        // -i: item ที่พัง (เช่น DRM ใน Phase 3) ให้ข้าม ไม่ล้มทั้ง playlist
+        cmd.arg("--yes-playlist").arg("-i");
+    } else {
+        cmd.arg("--no-playlist");
+    }
 
     cmd.args(build_format_args(opts));
     ffmpeg_location_arg(&mut cmd, &tools.ffmpeg);
@@ -478,7 +517,7 @@ pub fn download(
     let pid = child.id();
     let stderr = child.stderr.take().unwrap();
     let stdout = child.stdout.take().unwrap();
-    let mut last_path = String::new();
+    let mut items: Vec<(Option<u32>, PathBuf)> = Vec::new();
     let done = AtomicBool::new(false);
 
     std::thread::scope(|s| {
@@ -492,23 +531,41 @@ pub fn download(
                 std::thread::sleep(Duration::from_millis(150));
             }
         });
-        // stderr: ข้อความสถานะ/คำเตือนอย่างเดียว (progress ไม่ได้มาทางนี้)
+        // stderr: ข้อความสถานะ/คำเตือน (progress ไม่ได้มาทางนี้)
         s.spawn(|| {
             for line in BufReader::new(stderr).lines().map_while(Result::ok) {
                 let t = line.trim();
                 if !t.is_empty() {
-                    on(-1.0, t);
+                    on(DlEvent::Status { index: None, line: t });
                 }
             }
         });
-        // stdout: progress (PROG:NN%) ปนกับ path ของไฟล์ผลลัพธ์ (บรรทัด non-PROG สุดท้าย)
+        // stdout: PROG:::pct:::idx (progress) + DONE:::idx:::path (item เสร็จ)
         for line in BufReader::new(stdout).lines().map_while(Result::ok) {
             let t = line.trim();
-            if let Some(p) = t.strip_prefix("PROG:") {
-                let pct = p.trim().trim_end_matches('%').trim().parse::<f32>().unwrap_or(-1.0);
-                on(pct, t);
-            } else if !t.is_empty() {
-                last_path = t.to_string();
+            if let Some(rest) = t.strip_prefix("PROG:::") {
+                let mut f = rest.splitn(2, ":::");
+                let pct = f
+                    .next()
+                    .unwrap_or("")
+                    .trim()
+                    .trim_end_matches('%')
+                    .trim()
+                    .parse::<f32>()
+                    .unwrap_or(-1.0);
+                let index = parse_idx(f.next().unwrap_or(""));
+                on(DlEvent::Progress { index, pct });
+            } else if let Some(rest) = t.strip_prefix("DONE:::") {
+                let mut f = rest.splitn(2, ":::");
+                let index = parse_idx(f.next().unwrap_or(""));
+                let path = PathBuf::from(f.next().unwrap_or("").trim());
+                if path.is_file() {
+                    on(DlEvent::ItemDone {
+                        index,
+                        path: path.clone(),
+                    });
+                    items.push((index, path));
+                }
             }
         }
         done.store(true, Ordering::Relaxed);
@@ -518,17 +575,14 @@ pub fn download(
     if cancel.load(Ordering::Relaxed) {
         return Err("ยกเลิกการโหลด".into());
     }
-    if !status.success() {
-        return Err("yt-dlp โหลดไม่สำเร็จ".into());
-    }
-    if last_path.is_empty() {
+    // playlist ใช้ -i: บาง item พังได้แต่ถ้าได้อย่างน้อย 1 ไฟล์ถือว่าสำเร็จบางส่วน
+    if items.is_empty() {
+        if !status.success() {
+            return Err("yt-dlp โหลดไม่สำเร็จ".into());
+        }
         return Err("yt-dlp ไม่ได้พิมพ์ path ของไฟล์ผลลัพธ์".into());
     }
-    let file = PathBuf::from(&last_path);
-    if !file.is_file() {
-        return Err(format!("หาไฟล์ผลลัพธ์ไม่เจอ ({})", file.display()));
-    }
-    Ok(file)
+    Ok(items)
 }
 
 // ---------- verify ----------
@@ -588,11 +642,74 @@ pub fn file_into(src: &Path, category: &str, title: &str) -> VResult<PathBuf> {
     if let Some(parent) = dest.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("สร้างโฟลเดอร์ปลายทางไม่ได้: {}", e))?;
     }
-    if fs::rename(src, &dest).is_err() {
-        fs::copy(src, &dest).map_err(|e| format!("ย้ายไฟล์ไม่สำเร็จ: {}", e))?;
+    move_file(src, &dest)?;
+    Ok(dest)
+}
+
+/// ย้ายไฟล์เข้า ~/VDO/<category>/<subfolder>/ โดย "คงชื่อไฟล์เดิม" (มีเลขลำดับนำหน้า)
+/// ใช้กับ playlist — แต่ละ item ชื่อต่างกันอยู่แล้ว ไม่ใช้ title เดียวร่วมกัน. คืน path ปลายทาง
+pub fn file_into_dir(src: &Path, category: &str, subfolder: &str) -> VResult<PathBuf> {
+    let cat = if category.trim().is_empty() { "ยังไม่จัดหมวด" } else { category.trim() };
+    let name = src.file_name().ok_or("ไฟล์ต้นทางไม่มีชื่อ")?;
+    let dest = vdo_root().join(cat).join(sanitize_title(subfolder)).join(name);
+    if let Some(parent) = dest.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("สร้างโฟลเดอร์ปลายทางไม่ได้: {}", e))?;
+    }
+    move_file(src, &dest)?;
+    Ok(dest)
+}
+
+/// ย้ายไฟล์ (rename ก่อน, ข้าม filesystem ค่อย copy+remove)
+fn move_file(src: &Path, dest: &Path) -> VResult<()> {
+    if fs::rename(src, dest).is_err() {
+        fs::copy(src, dest).map_err(|e| format!("ย้ายไฟล์ไม่สำเร็จ: {}", e))?;
         let _ = fs::remove_file(src);
     }
-    Ok(dest)
+    Ok(())
+}
+
+/// เขียนไฟล์ playlist .m3u (รายชื่อไฟล์ relative) ในโฟลเดอร์ปลายทาง — คืน path ของ .m3u
+pub fn write_m3u(dir: &Path, name: &str, files: &[PathBuf]) -> VResult<PathBuf> {
+    let m3u = dir.join(format!("{}.m3u", sanitize_title(name)));
+    let mut content = String::from("#EXTM3U\n");
+    for f in files {
+        if let Some(n) = f.file_name().and_then(|x| x.to_str()) {
+            content.push_str(n);
+            content.push('\n');
+        }
+    }
+    fs::write(&m3u, content).map_err(|e| format!("เขียน .m3u ไม่ได้: {}", e))?;
+    Ok(m3u)
+}
+
+/// ดึงข้อมูล playlist แบบเร็ว (ไม่โหลดวิดีโอ) → (ชื่อ playlist, รายชื่อ title แต่ละ entry)
+/// ใช้ทำ subfolder + pre-create แถวลูกใน GUI (Option B)
+pub fn probe_playlist(url: &str) -> VResult<(String, Vec<String>)> {
+    let yt = find_tool("yt-dlp", "--version").ok_or("ยังไม่มี yt-dlp")?;
+    let out = Command::new(yt)
+        .args(["--flat-playlist", "--no-warnings"])
+        .args(["--print", "%(playlist_title)s:::%(title)s"])
+        .arg(url)
+        .output()
+        .map_err(|e| format!("รัน yt-dlp ไม่ได้: {}", e))?;
+    let text = String::from_utf8_lossy(&out.stdout);
+    let mut pl_title = String::new();
+    let mut entries = Vec::new();
+    for line in text.lines().filter(|l| !l.trim().is_empty()) {
+        let mut f = line.splitn(2, ":::");
+        let t = f.next().unwrap_or("").trim();
+        if pl_title.is_empty() && !t.is_empty() && t != "NA" {
+            pl_title = t.to_string();
+        }
+        entries.push(f.next().unwrap_or("").trim().to_string());
+    }
+    if entries.is_empty() {
+        return Err("ดึงข้อมูล playlist ไม่ได้ (URL ใช้ไม่ได้ หรือไม่ใช่ playlist?)".into());
+    }
+    if pl_title.is_empty() {
+        pl_title = "playlist".to_string();
+    }
+    Ok((pl_title, entries))
 }
 
 // ---------- update ----------

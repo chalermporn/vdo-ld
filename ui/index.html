@@ -82,6 +82,9 @@
         <input type="checkbox" id="subs" style="width:14px;height:14px;accent-color:var(--green)"> ซับ
         <select id="sublangs"><option value="en,th">en,th</option><option value="all">ทั้งหมด</option><option value="en">อังกฤษ</option><option value="th">ไทย</option></select>
       </label>
+      <label class="flex items-center gap-1" title="ถ้าลิงก์เป็น playlist/คอร์ส → โหลดทุกคลิป">
+        <input type="checkbox" id="plist" style="width:14px;height:14px;accent-color:var(--green)"> ทั้ง playlist
+      </label>
       <label class="flex items-center gap-1">เก็บที่
         <select id="cat"><option>ยังไม่จัดหมวด</option></select>
       </label>
@@ -166,7 +169,7 @@ let uid = 1;
 let activeTab = 'all';
 let smart = true;
 const LS = { rows:'vdo_rows', mode:'vdo_mode', quality:'vdo_quality', cat:'vdo_cat', smart:'vdo_smart', theme:'vdo_theme',
-  vfmt:'vdo_vfmt', afmt:'vdo_afmt', aquality:'vdo_aquality', subs:'vdo_subs', sublangs:'vdo_sublangs' };
+  vfmt:'vdo_vfmt', afmt:'vdo_afmt', aquality:'vdo_aquality', subs:'vdo_subs', sublangs:'vdo_sublangs', plist:'vdo_plist' };
 
 // สลับชุด control ตามโหมด: วิดีโอ→mp4/mkv+คุณภาพ+ซับ, เสียง→mp3/m4a/ogg+คุณภาพเสียง
 function syncMode(){
@@ -238,14 +241,85 @@ function rowHtml(r){
   </div>`;
 }
 
+// แถวหัวกลุ่ม playlist (Option B): สรุปลูก + ปุ่มหยุดทั้งชุด/เปิดโฟลเดอร์
+function groupHtml(r){
+  const kids = rows.filter(c=>c.parentId===r.id);
+  const done = kids.filter(k=>k.state==='done').length;
+  const active = kids.filter(k=>k.state==='dl').length;
+  const skip = kids.filter(k=>k.state==='skip').length;
+  const total = r.count || kids.length;
+  const summary = r.state==='error' ? r.err
+    : `${done} เสร็จ${active?` · ${active} กำลังโหลด`:''}${skip?` · ${skip} ข้าม`:''} · ${total} คลิป`;
+  const badge = r.state==='error'
+    ? `<span class="text-[11px] px-2 py-0.5 rounded-full" style="background:rgba(220,38,38,.14);color:var(--danger)">ผิดพลาด</span>`
+    : r.state==='done'
+    ? `<span class="text-[11px] px-2 py-0.5 rounded-full" style="background:rgba(56,203,137,.16);color:var(--ok-d)">เสร็จ ${done}/${total}</span>`
+    : `<span class="text-[11px] px-2 py-0.5 rounded-full" style="background:rgba(11,136,238,.14);color:var(--green-d)">${done} / ${total}</span>`;
+  let actions='';
+  if(r.state==='dl') actions+=`<button onclick="cancel(${r.id})" class="pill grid place-items-center w-8 h-8 rounded-lg" title="หยุดทั้ง playlist"><i data-lucide="square"></i></button>`;
+  if(r.state==='done'&&r.path) actions+=`<button onclick="revealPath(${r.id})" class="pill grid place-items-center w-8 h-8 rounded-lg" title="เปิดโฟลเดอร์"><i data-lucide="folder-open"></i></button>`;
+  actions+=`<button onclick="askDelete(${r.id})" class="pill grid place-items-center w-8 h-8 rounded-lg" title="เอาออกจากรายการ"><i data-lucide="trash-2"></i></button>`;
+  return `<div class="dlgroup flex items-center gap-3 rounded-xl px-3 py-2" style="background:rgba(11,136,238,.07);border:1px solid var(--line)">
+    <i data-lucide="list-video" style="color:var(--green);width:18px;height:18px"></i>
+    <div class="flex-1 min-w-0">
+      <div class="flex items-center gap-2"><p class="ink text-[13px] font-bold truncate">${r.title||'(playlist)'}</p>${badge}</div>
+      <p class="muted text-xs mt-0.5 truncate">${summary}</p>
+    </div>
+    <div class="shrink-0 flex items-center gap-1">${actions}</div>
+  </div>`;
+}
+
+// แถวลูกราย clip ใน playlist
+function childHtml(c){
+  const badge = c.state==='done'
+    ? `<span class="text-[11px] px-2 py-0.5 rounded-full" style="background:rgba(56,203,137,.16);color:var(--ok-d)">เสร็จ</span>`
+    : c.state==='skip'
+    ? `<span class="text-[11px] px-2 py-0.5 rounded-full" style="background:rgba(245,158,11,.16);color:#d97706">ข้าม</span>`
+    : c.state==='dl'
+    ? `<span class="text-[11px] muted">${c.pct>=100?'merge…':Math.round(c.pct||0)+'%'}</span>`
+    : `<span class="text-[11px] px-2 py-0.5 rounded-full" style="background:var(--hover);color:var(--muted)">รอคิว</span>`;
+  const showBar = c.state==='dl';
+  const progress = showBar ? `
+    <div class="h-1.5 rounded-full mt-1.5 overflow-hidden" style="background:var(--line)">
+      <div class="bar-fill h-full rounded-full" style="width:${c.pct||0}%;transition:width .3s"></div>
+    </div>` : '';
+  const sub = c.state==='done' ? `${c.size||'—'} · ${c.res||''}` : (c.state==='skip'?(c.err||'ข้าม'):'');
+  let actions='';
+  if(c.state==='done'&&c.path){
+    actions+=`<button onclick="revealPath(${c.id})" class="pill grid place-items-center w-8 h-8 rounded-lg" title="เปิดโฟลเดอร์"><i data-lucide="folder-open"></i></button>`;
+  }
+  return `<div class="dlchild flex items-center gap-3 panel border line rounded-xl p-2.5" style="margin-left:22px">
+    <div class="relative w-16 h-10 rounded-lg shrink-0 overflow-hidden grid place-items-center" style="background:${c.state==='skip'?'var(--hover)':'rgba(11,136,238,.10)'}">
+      <i data-lucide="${c.state==='skip'?'lock':'play'}" style="color:${c.state==='skip'?'var(--muted)':'var(--green)'};width:18px;height:18px"></i>
+    </div>
+    <div class="flex-1 min-w-0">
+      <div class="flex items-center gap-2">
+        <span class="text-[11px] muted shrink-0" style="font-variant-numeric:tabular-nums">${String(c.index).padStart(2,'0')}</span>
+        <p class="ink text-[13px] font-medium truncate">${c.title||('#'+c.index)}</p>${badge}
+      </div>
+      ${sub?`<p class="muted text-xs mt-0.5 truncate">${sub}</p>`:''}
+      ${progress}
+    </div>
+    <div class="shrink-0 flex items-center gap-1">${actions}</div>
+  </div>`;
+}
+
 function render(){
   const list=$('list'), empty=$('empty');
-  list.querySelectorAll('.dlrow').forEach(e=>e.remove());
-  const shown = rows.filter(r=> activeTab==='all' ? true : r.kind===activeTab);
-  if(shown.length===0){ empty.classList.remove('hidden'); empty.classList.add('flex'); }
+  list.querySelectorAll('.dlrow,.dlgroup,.dlchild').forEach(e=>e.remove());
+  const tops = rows.filter(r=>!r.parentId).filter(r=> activeTab==='all' ? true : r.kind===activeTab);
+  if(tops.length===0){ empty.classList.remove('hidden'); empty.classList.add('flex'); }
   else{
     empty.classList.add('hidden'); empty.classList.remove('flex');
-    shown.forEach(r=>{ const d=document.createElement('div'); d.innerHTML=rowHtml(r); list.appendChild(d.firstElementChild); });
+    const add = html=>{ const d=document.createElement('div'); d.innerHTML=html; list.appendChild(d.firstElementChild); };
+    tops.forEach(r=>{
+      if(r.isGroup){
+        add(groupHtml(r));
+        rows.filter(c=>c.parentId===r.id).sort((a,b)=>a.index-b.index).forEach(c=>add(childHtml(c)));
+      }else{
+        add(rowHtml(r));
+      }
+    });
   }
   lucide.createIcons();
   saveRows();
@@ -297,10 +371,52 @@ async function startDownload(url, title){
   render();
 }
 
+// router: playlist เปิดอยู่ → startPlaylist, ไม่งั้นโหลดคลิปเดียว
+function launch(url, title){
+  return $('plist').checked ? startPlaylist(url, title) : startDownload(url, title);
+}
+
+async function startPlaylist(url, title){
+  const o = curOpts();
+  const pid = uid++;
+  const parent={ id:pid, isGroup:true, title:title||'(playlist)', cat:o.cat, kind:o.audio?'audio':'video',
+    url, state:'dl', count:0, audio:o.audio, maxHeight:o.maxHeight, fmt:o.audio?o.audioFmt:o.container, subs:o.subs };
+  rows.unshift(parent); render();
+
+  if(!inTauri){ parent.state='error'; parent.err='(เดโม) playlist ใช้ได้เฉพาะในแอปจริง'; render(); return; }
+
+  // ดึงรายชื่อคลิปมา pre-create แถวลูก
+  let info;
+  try{ info = await invoke('playlist_probe',{url}); }
+  catch(e){ parent.state='error'; parent.err='ดึง playlist ไม่ได้: '+String(e?.message||e); render(); return; }
+  parent.title = title || info.title || '(playlist)';
+  parent.count = info.entries.length;
+  info.entries.forEach((t,i)=>{
+    rows.push({ id:uid++, parentId:pid, index:i+1, title:t||('#'+(i+1)), kind:parent.kind, state:'queue', pct:0 });
+  });
+  render();
+
+  try{
+    const res=await invoke('download_video',{ id:pid, url, title:parent.title, category:o.cat, audio:o.audio, maxHeight:o.maxHeight,
+      container:o.container, audioFmt:o.audioFmt, audioQuality:o.audioQuality, subs:o.subs, subLangs:o.subLangs, playlist:true });
+    parent.state='done'; parent.path=res.path; parent.count=res.count;
+    // ลูกที่ไม่ได้ไฟล์ (ไม่เคยเสร็จ) → ถือว่าข้าม
+    rows.filter(c=>c.parentId===pid && c.state!=='done').forEach(c=>{ c.state='skip'; if(!c.err) c.err='ไม่ได้ไฟล์'; });
+    setStat('playlist เสร็จ · '+res.count+' ไฟล์ · '+res.path);
+  }catch(e){
+    const msg=String(e?.message||e);
+    parent.state = /ยกเลิก/.test(msg) ? 'cancel' : 'error';
+    parent.err = msg;
+    rows.filter(c=>c.parentId===pid && (c.state==='dl'||c.state==='queue')).forEach(c=>{ c.state='skip'; });
+    setStat(parent.state==='cancel'?'ยกเลิกแล้ว':'ผิดพลาด: '+msg);
+  }
+  render();
+}
+
 async function pasteLink(){
   let url='';
   if(inTauri){ try{ url=await invoke('clipboard'); }catch(e){} }
-  if(smart && isUrl(url)){ return startDownload(url.trim(), ''); }
+  if(smart && isUrl(url)){ return launch(url.trim(), ''); }
   openComposer(isUrl(url)?url.trim():'');
 }
 
@@ -313,7 +429,7 @@ function openComposer(prefill){
 function go(){
   const url=$('url').value.trim(), title=$('title').value.trim();
   if(!url){ $('url').focus(); return; }
-  startDownload(url, title);
+  launch(url, title);
   $('url').value=''; $('title').value=''; $('metahint').classList.add('hidden');
   $('composer').classList.add('hidden');
 }
@@ -334,6 +450,7 @@ function onUrl(){
 async function cancel(id){ const r=rows.find(x=>x.id===id); if(!r)return;
   if(inTauri){ try{ await invoke('cancel_download',{id}); }catch(e){} } else { r.state='cancel'; render(); } }
 async function reveal(id){ const r=rows.find(x=>x.id===id); if(r?.path && inTauri){ try{ await invoke('reveal',{path:r.path}); }catch(e){ setStat('เปิดโฟลเดอร์ไม่ได้: '+e); } } }
+const revealPath = reveal; // group/child เปิดโฟลเดอร์ด้วย path ของแถวนั้น
 function retry(id){ const r=rows.find(x=>x.id===id); if(!r)return;
   $('mode').value=r.kind==='audio'?'audio':'video';
   syncMode();
@@ -344,16 +461,17 @@ function retry(id){ const r=rows.find(x=>x.id===id); if(!r)return;
   rows=rows.filter(x=>x.id!==id); startDownload(r.url, r.title==='(ยังไม่ตั้งชื่อ)'?'':r.title); }
 
 // ---------- delete (list / disk) ----------
-function rmList(id){ rows=rows.filter(x=>x.id!==id); closeModal(); render(); }
+// ลบ group → ลบลูกทั้งหมดด้วย
+function rmList(id){ rows=rows.filter(x=>x.id!==id && x.parentId!==id); closeModal(); render(); }
 async function delFile(id){ const r=rows.find(x=>x.id===id);
   if(r?.path && inTauri){ try{ await invoke('delete_file',{path:r.path}); setStat('ลบไฟล์แล้ว'); }catch(e){ setStat('ลบไฟล์ไม่ได้: '+e); } }
   rmList(id); }
 function closeModal(){ $('modal').classList.add('hidden'); }
 function askDelete(id){
   const r=rows.find(x=>x.id===id); if(!r) return;
-  $('modal-title').textContent='ลบรายการนี้?';
+  $('modal-title').textContent = r.isGroup ? 'เอา playlist นี้ออกจากรายการ?' : 'ลบรายการนี้?';
   $('modal-sub').textContent=r.title||'';
-  const hasFile = inTauri && r.state==='done' && r.path;
+  const hasFile = inTauri && r.state==='done' && r.path && !r.isGroup; // group path = โฟลเดอร์ ลบไฟล์เดี่ยวไม่ได้
   const A=$('modal-actions'); A.innerHTML='';
   const mk=(label,cls,fn,bg)=>{ const b=document.createElement('button');
     b.className='rounded-lg px-3 py-2 text-[13px] font-semibold '+cls; b.textContent=label; b.onclick=fn;
@@ -363,7 +481,12 @@ function askDelete(id){
   mk('ยกเลิก','muted', closeModal);
   $('modal').classList.remove('hidden');
 }
-function clearDone(){ rows=rows.filter(r=>r.state!=='done'); render(); }
+function clearDone(){
+  // ลบเฉพาะ top-level ที่เสร็จ + ลูกของมัน (ลูกที่เสร็จแต่ group ยังโหลดอยู่ ไม่ลบ)
+  const goneTops = rows.filter(r=>!r.parentId && r.state==='done').map(r=>r.id);
+  rows = rows.filter(r=> r.parentId ? !goneTops.includes(r.parentId) : r.state!=='done');
+  render();
+}
 
 async function doUpdate(){
   if(!inTauri){ setStat('(เดโม) อัปเดตได้เฉพาะในแอปจริง'); return; }
@@ -401,6 +524,7 @@ async function init(){
   const sq=localStorage.getItem(LS.quality); if(sq) $('quality').value=sq;
   const saq=localStorage.getItem(LS.aquality); if(saq!==null) $('aquality').value=saq;
   if(localStorage.getItem(LS.subs)==='1') $('subs').checked=true;
+  if(localStorage.getItem(LS.plist)==='1') $('plist').checked=true;
   const sl=localStorage.getItem(LS.sublangs); if(sl) $('sublangs').value=sl;
   syncMode();
 
@@ -410,6 +534,7 @@ async function init(){
   $('aquality').addEventListener('change',()=>localStorage.setItem(LS.aquality,$('aquality').value));
   $('subs').addEventListener('change',()=>localStorage.setItem(LS.subs,$('subs').checked?'1':'0'));
   $('sublangs').addEventListener('change',()=>localStorage.setItem(LS.sublangs,$('sublangs').value));
+  $('plist').addEventListener('change',()=>localStorage.setItem(LS.plist,$('plist').checked?'1':'0'));
 
   $('tabs').querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
     activeTab=b.dataset.tab;
@@ -423,7 +548,7 @@ async function init(){
   drop.addEventListener('dragleave',e=>{ if(e.target===drop) drop.classList.remove('drag'); });
   drop.addEventListener('drop',e=>{ e.preventDefault(); drop.classList.remove('drag');
     const txt=(e.dataTransfer.getData('text/uri-list')||e.dataTransfer.getData('text/plain')||'').trim();
-    if(isUrl(txt)){ smart ? startDownload(txt,'') : openComposer(txt); } });
+    if(isUrl(txt)){ smart ? launch(txt,'') : openComposer(txt); } });
   $('modal').addEventListener('click',e=>{ if(e.target===$('modal')) closeModal(); });
 
   if(!inTauri){ setStat('(เดโม ในเบราว์เซอร์ — เปิดผ่านแอปเพื่อโหลดจริง)'); return; }
@@ -437,9 +562,21 @@ async function init(){
     const savedCat=localStorage.getItem(LS.cat); if(savedCat && [...sel.options].some(o=>o.value===savedCat)) sel.value=savedCat;
   }catch(e){ console.error(e); }
 
-  listen('vdo://progress', e=>{ const r=rows.find(x=>x.id===e.payload.id); if(r && r.state==='dl' && e.payload.pct>=0){ r.pct=e.payload.pct; render(); } });
+  listen('vdo://progress', e=>{ const {id, index, pct}=e.payload;
+    if(index==null){ // คลิปเดี่ยว
+      const r=rows.find(x=>x.id===id); if(r && r.state==='dl' && pct>=0){ r.pct=pct; render(); }
+    }else{ // ลูกใน playlist — map ตาม (parentId,index)
+      const c=rows.find(x=>x.parentId===id && x.index===index);
+      if(c && c.state!=='done'){ c.state='dl'; if(pct>=0) c.pct=pct; render(); }
+    }
+  });
+  // ลูก playlist โหลด+ย้ายเสร็จรายตัว
+  listen('vdo://item', e=>{ const {id, index, path, size, height}=e.payload;
+    const c=rows.find(x=>x.parentId===id && x.index===index);
+    if(c){ c.state='done'; c.pct=100; c.path=path; c.size=size; if(height && height!=='?') c.res=height+'p'; render(); }
+  });
   listen('vdo://status', e=>{ const t=e.payload.text||''; setStat(t);
-    const r=rows.find(x=>x.id===e.payload.id); if(r && /merge|ตรวจไฟล์/.test(t) && r.state==='dl'){ r.state='merge'; render(); } });
+    const r=rows.find(x=>x.id===e.payload.id); if(r && !r.isGroup && /merge|ตรวจไฟล์/.test(t) && r.state==='dl'){ r.state='merge'; render(); } });
 }
 init();
 </script>

@@ -9,8 +9,8 @@ use std::env;
 use std::process::Command;
 use std::sync::atomic::AtomicBool;
 use vdo_dl::{
-    download, ensure_tools, file_into, human_size, update, vdo_root, verify, ytdlp_path,
-    AudioFmt, Container, DownloadOpts, VResult,
+    download, ensure_tools, file_into, file_into_dir, human_size, probe_playlist, update,
+    vdo_root, verify, write_m3u, ytdlp_path, AudioFmt, Container, DlEvent, DownloadOpts, VResult,
 };
 
 fn color_on() -> bool {
@@ -49,6 +49,7 @@ Options:
   --audio-format FMT   เสียง: mp3 | m4a | ogg (default mp3)
   --audio-quality N    เสียง: 0(ดีสุด)..10 (ไม่ใส่ = ค่า default)
   --subs[=LANGS]       วิดีโอ: ดาวน์โหลด+ฝังคำบรรยาย (ไม่ระบุ = en,th)
+  --playlist           โหลดทั้ง playlist → ~/VDO/<หมวด>/<ชื่อ/playlist>/ + .m3u
 
 ครั้งแรกที่รัน ถ้าเครื่องไม่มี yt-dlp/ffmpeg จะโหลดมาเก็บเองที่ <data>/vdo-dl/bin/.
 Env: VDO_ROOT, VDO_BIN, NO_COLOR";
@@ -108,6 +109,7 @@ fn run() -> VResult<()> {
                 opts.subs = true;
                 opts.sub_langs = s[7..].to_string();
             }
+            "--playlist" => opts.playlist = true,
             s => pos.push(s),
         }
     }
@@ -128,16 +130,47 @@ fn run() -> VResult<()> {
     }
 
     let cancel = AtomicBool::new(false);
-    let file = download(&tools, url, &vdo_root().join("tmp"), &opts, &cancel, &|pct, line| {
-        if pct >= 0.0 {
-            eprint!("\r{}", paint("36", &format!("  {:>5.1}%", pct)));
-        } else {
-            eprintln!("{}", line);
+    let on = |ev: DlEvent| match ev {
+        DlEvent::Progress { index, pct } if pct >= 0.0 => match index {
+            Some(i) => eprint!("\r{}", paint("36", &format!("  #{:<2} {:>5.1}%", i, pct))),
+            None => eprint!("\r{}", paint("36", &format!("  {:>5.1}%", pct))),
+        },
+        DlEvent::Progress { .. } => {}
+        DlEvent::Status { line, .. } => eprintln!("{}", line),
+        DlEvent::ItemDone { index: Some(i), path } => {
+            eprintln!();
+            ok(&format!("#{} เสร็จ: {}", i, path.display()));
         }
-    })?;
+        DlEvent::ItemDone { .. } => {}
+    };
+    let items = download(&tools, url, &vdo_root().join("tmp"), &opts, &cancel, &on)?;
     eprintln!();
 
-    let v = verify(&tools.ffprobe, &file);
+    // playlist: ย้ายแต่ละไฟล์เข้า subfolder (คงชื่อมีเลขลำดับ) + เขียน .m3u
+    if opts.playlist {
+        let subfolder = if !title.is_empty() {
+            title.to_string()
+        } else {
+            probe_playlist(url).map(|(t, _)| t).unwrap_or_else(|_| "playlist".into())
+        };
+        let mut dests = vec![];
+        for (_idx, src) in &items {
+            dests.push(file_into_dir(src, category, &subfolder)?);
+        }
+        let dir = dests[0].parent().unwrap_or(&dests[0]).to_path_buf();
+        ok(&format!("playlist {} ไฟล์ → {}", dests.len(), dir.display()));
+        if let Ok(m3u) = write_m3u(&dir, &subfolder, &dests) {
+            ok(&format!("เพลย์ลิสต์: {}", m3u.display()));
+        }
+        for d in &dests {
+            println!("{}", d.display());
+        }
+        return Ok(());
+    }
+
+    // วิดีโอเดี่ยว
+    let (_idx, file) = &items[0];
+    let v = verify(&tools.ffprobe, file);
     ok(&format!(
         "ได้ไฟล์: {}x{} {}/{}  ({})",
         v.width, v.height, v.vcodec, v.acodec, human_size(v.size_bytes)
@@ -149,7 +182,7 @@ fn run() -> VResult<()> {
         return Ok(());
     }
 
-    let dest = file_into(&file, category, title)?;
+    let dest = file_into(file, category, title)?;
     ok(&format!("ย้ายเข้า: {}", dest.display()));
     println!("{}", dest.display());
     Ok(())
