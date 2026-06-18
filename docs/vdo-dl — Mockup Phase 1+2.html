@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<!-- saved from url=(0043)file:///private/tmp/vdo-dl-mockup-p1p2.html -->
+<html lang="th" class="light"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>vdo-dl — Mockup Phase 1+2</title>
+<script src="./vdo-dl — Mockup Phase 1+2_files/saved_resource"></script>
+<script src="./vdo-dl — Mockup Phase 1+2_files/lucide@latest"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com/">
+<link href="./vdo-dl — Mockup Phase 1+2_files/css2" rel="stylesheet">
+<style>
+  :root{
+    --green:#0b88ee; --green-d:#0a6fc0; --green-l:#4dafff; --ok:#38cb89; --ok-d:#2aa86d;
+    --bg:#f3f8fd; --panel:#ffffff; --line:#e2ebf3; --ink:#1f2a36;
+    --muted:#8a96a3; --hover:#eef5fc; --field:#f7fbfe; --danger:#dc2626;
+    --new:#f59e0b; --new-bg:rgba(245,158,11,.12);
+  }
+  html.dark{
+    --green:#2c9af2; --green-d:#0b88ee; --green-l:#4dafff; --ok:#38cb89; --ok-d:#34c082;
+    --bg:#10171f; --panel:#16202b; --line:#243240; --ink:#e6edf4;
+    --muted:#7e8c9a; --hover:#1c2835; --field:#131c25; --danger:#f87171;
+    --new:#fbbf24; --new-bg:rgba(251,191,36,.14);
+  }
+  *{box-sizing:border-box}
+  body{font-family:'Quicksand','Segoe UI',-apple-system,sans-serif;font-weight:500;background:var(--bg);color:var(--ink);margin:0;padding:24px}
+  .ink{color:var(--ink)} .muted{color:var(--muted)}
+  .panel{background:var(--panel)} .line{border-color:var(--line)}
+  .pill{transition:.15s} .pill:hover{background:var(--hover)}
+  .btn-green{background:linear-gradient(180deg,var(--green-l),var(--green));box-shadow:0 1px 2px rgba(0,0,0,.18);}
+  .bar-fill{background:linear-gradient(90deg,var(--green-l),var(--green));}
+  input,select{background:var(--field);color:var(--ink);border:1px solid var(--line);outline:none;border-radius:8px}
+  select{padding:4px 6px;font-size:13px}
+  [data-lucide]{width:18px;height:18px}
+  .app{max-width:920px;margin:0 auto;border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.08)}
+  .NEW{position:relative;outline:1.5px dashed var(--new);outline-offset:3px;border-radius:8px}
+  .tag{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;color:#fff;background:var(--new);padding:1px 7px;border-radius:999px;white-space:nowrap}
+  .legend{max-width:920px;margin:0 auto 18px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  .note{max-width:920px;margin:14px auto 0;font-size:12.5px;line-height:1.7}
+  .swimsep{max-width:920px;margin:26px auto 8px;font-weight:700;font-size:13px;color:var(--green-d);display:flex;align-items:center;gap:8px}
+  .swimsep::before{content:"";flex:0 0 18px;height:2px;background:var(--green)}
+  .chk{display:inline-flex;align-items:center;gap:5px;font-size:13px;cursor:pointer;user-select:none}
+  .chk input{width:15px;height:15px;accent-color:var(--green)}
+  code{background:var(--field);border:1px solid var(--line);border-radius:5px;padding:1px 5px;font-size:12px}
+</style>
+<style>*, ::before, ::after{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgb(59 130 246 / 0.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }::backdrop{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgb(59 130 246 / 0.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }/* ! tailwindcss v3.4.17 | MIT License | https://tailwindcss.com */*,::after,::before{box-sizing:border-box;border-width:0;border-style:solid;border-color:#e5e7eb}::after,::before{--tw-content:''}:host,html{line-height:1.5;-webkit-text-size-adjust:100%;-moz-tab-size:4;tab-size:4;font-family:ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";font-feature-settings:normal;font-variation-settings:normal;-webkit-tap-highlight-color:transparent}body{margin:0;line-height:inherit}hr{height:0;color:inherit;border-top-width:1px}abbr:where([title]){-webkit-text-decoration:underline dotted;text-decoration:underline dotted}h1,h2,h3,h4,h5,h6{font-size:inherit;font-weight:inherit}a{color:inherit;text-decoration:inherit}b,strong{font-weight:bolder}code,kbd,pre,samp{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;font-feature-settings:normal;font-variation-settings:normal;font-size:1em}small{font-size:80%}sub,sup{font-size:75%;line-height:0;position:relative;vertical-align:baseline}sub{bottom:-.25em}sup{top:-.5em}table{text-indent:0;border-color:inherit;border-collapse:collapse}button,input,optgroup,select,textarea{font-family:inherit;font-feature-settings:inherit;font-variation-settings:inherit;font-size:100%;font-weight:inherit;line-height:inherit;letter-spacing:inherit;color:inherit;margin:0;padding:0}button,select{text-transform:none}button,input:where([type=button]),input:where([type=reset]),input:where([type=submit]){-webkit-appearance:button;background-color:transparent;background-image:none}:-moz-focusring{outline:auto}:-moz-ui-invalid{box-shadow:none}progress{vertical-align:baseline}::-webkit-inner-spin-button,::-webkit-outer-spin-button{height:auto}[type=search]{-webkit-appearance:textfield;outline-offset:-2px}::-webkit-search-decoration{-webkit-appearance:none}::-webkit-file-upload-button{-webkit-appearance:button;font:inherit}summary{display:list-item}blockquote,dd,dl,figure,h1,h2,h3,h4,h5,h6,hr,p,pre{margin:0}fieldset{margin:0;padding:0}legend{padding:0}menu,ol,ul{list-style:none;margin:0;padding:0}dialog{padding:0}textarea{resize:vertical}input::placeholder,textarea::placeholder{opacity:1;color:#9ca3af}[role=button],button{cursor:pointer}:disabled{cursor:default}audio,canvas,embed,iframe,img,object,svg,video{display:block;vertical-align:middle}img,video{max-width:100%;height:auto}[hidden]:where(:not([hidden=until-found])){display:none}.absolute{position:absolute}.relative{position:relative}.bottom-0\.5{bottom:0.125rem}.right-0\.5{right:0.125rem}.ml-auto{margin-left:auto}.mt-0\.5{margin-top:0.125rem}.mt-2{margin-top:0.5rem}.flex{display:flex}.grid{display:grid}.h-1\.5{height:0.375rem}.h-11{height:2.75rem}.h-12{height:3rem}.h-6{height:1.5rem}.h-8{height:2rem}.h-9{height:2.25rem}.h-full{height:100%}.w-20{width:5rem}.w-6{width:1.5rem}.w-8{width:2rem}.w-9{width:2.25rem}.w-px{width:1px}.min-w-0{min-width:0px}.flex-1{flex:1 1 0%}.shrink-0{flex-shrink:0}.flex-wrap{flex-wrap:wrap}.place-items-center{place-items:center}.items-center{align-items:center}.gap-1{gap:0.25rem}.gap-2{gap:0.5rem}.gap-3{gap:0.75rem}.gap-x-3{column-gap:0.75rem}.gap-y-1\.5{row-gap:0.375rem}.space-y-2 > :not([hidden]) ~ :not([hidden]){--tw-space-y-reverse:0;margin-top:calc(0.5rem * calc(1 - var(--tw-space-y-reverse)));margin-bottom:calc(0.5rem * var(--tw-space-y-reverse))}.overflow-hidden{overflow:hidden}.truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rounded{border-radius:0.25rem}.rounded-full{border-radius:9999px}.rounded-lg{border-radius:0.5rem}.rounded-xl{border-radius:0.75rem}.border{border-width:1px}.border-b{border-bottom-width:1px}.p-3{padding:0.75rem}.px-1{padding-left:0.25rem;padding-right:0.25rem}.px-2{padding-left:0.5rem;padding-right:0.5rem}.px-3{padding-left:0.75rem;padding-right:0.75rem}.px-4{padding-left:1rem;padding-right:1rem}.py-0\.5{padding-top:0.125rem;padding-bottom:0.125rem}.py-1\.5{padding-top:0.375rem;padding-bottom:0.375rem}.py-2{padding-top:0.5rem;padding-bottom:0.5rem}.py-2\.5{padding-top:0.625rem;padding-bottom:0.625rem}.py-3{padding-top:0.75rem;padding-bottom:0.75rem}.pl-3{padding-left:0.75rem}.pr-4{padding-right:1rem}.text-\[11px\]{font-size:11px}.text-\[13px\]{font-size:13px}.text-\[9px\]{font-size:9px}.text-lg{font-size:1.125rem;line-height:1.75rem}.text-sm{font-size:0.875rem;line-height:1.25rem}.text-xs{font-size:0.75rem;line-height:1rem}.font-bold{font-weight:700}.font-medium{font-weight:500}.font-semibold{font-weight:600}.text-white{--tw-text-opacity:1;color:rgb(255 255 255 / var(--tw-text-opacity, 1))}</style></head>
+<body>
+
+<div class="legend">
+  <span class="text-lg font-bold ink">vdo-dl · mockup Phase 1+2</span>
+  <span class="tag"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="sparkles" aria-hidden="true" style="width:11px;height:11px" class="lucide lucide-sparkles"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"></path><path d="M20 2v4"></path><path d="M22 4h-4"></path><circle cx="4" cy="20" r="2"></circle></svg> ของใหม่</span>
+  <span class="muted text-xs">= เส้นประส้ม คือ element ที่เพิ่มจาก Phase 1+2</span>
+  <button onclick="tog()" class="ml-auto pill border line rounded-lg px-3 py-1.5 text-xs flex items-center gap-1"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="moon" aria-hidden="true" style="width:14px;height:14px" class="lucide lucide-moon"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"></path></svg> สลับธีม</button>
+</div>
+
+<!-- ============ STATE A: VIDEO MODE ============ -->
+<div class="swimsep">A · โหมดวิดีโอ — toolbar เลือก mp4/mkv + คำบรรยาย</div>
+<div class="app">
+  <!-- header -->
+  <header class="flex items-center gap-2 px-4 h-11 border-b line panel">
+    <span class="grid place-items-center w-6 h-6 rounded-full" style="background:var(--green)"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="cloud" aria-hidden="true" style="width:15px;height:15px;color:#fff" class="lucide lucide-cloud"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"></path></svg></span>
+    <span class="text-sm font-bold ink">vdo-dl</span><span class="text-xs muted">— Video Downloader</span>
+    <div class="ml-auto flex items-center gap-1">
+      <button class="grid place-items-center w-9 h-9 rounded-lg pill"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="moon" aria-hidden="true" class="lucide lucide-moon"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"></path></svg></button>
+      <button class="grid place-items-center w-9 h-9 rounded-lg pill"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="settings" aria-hidden="true" class="lucide lucide-settings"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"></path><circle cx="12" cy="12" r="3"></circle></svg></button>
+    </div>
+  </header>
+  <!-- toolbar -->
+  <div class="flex items-center gap-2 px-4 py-2.5 border-b line panel flex-wrap">
+    <button class="btn-green text-white font-semibold text-[13px] rounded-lg pl-3 pr-4 py-2 flex items-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="clipboard-paste" aria-hidden="true" style="color:#fff" class="lucide lucide-clipboard-paste"><path d="M11 14h10"></path><path d="M16 4h2a2 2 0 0 1 2 2v1.344"></path><path d="m17 18 4-4-4-4"></path><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 1.793-1.113"></path><rect x="8" y="2" width="8" height="4" rx="1"></rect></svg> วางลิงก์</button>
+    <button class="grid place-items-center w-9 h-9 rounded-lg border line pill" style="background:rgba(11,136,238,.14);color:var(--green-d)"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="lightbulb" aria-hidden="true" class="lucide lucide-lightbulb"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"></path><path d="M9 18h6"></path><path d="M10 22h4"></path></svg></button>
+    <div class="h-6 w-px" style="background:var(--line)"></div>
+    <div class="flex items-center gap-x-3 gap-y-1.5 text-[13px] flex-wrap muted">
+      <label class="flex items-center gap-1">โหลด
+        <select><option>วิดีโอ</option><option>เสียง</option></select>
+      </label>
+      <label class="flex items-center gap-1 NEW">รูปแบบ
+        <select><option>MP4</option><option>MKV</option></select>
+      </label>
+      <label class="flex items-center gap-1">คุณภาพ
+        <select><option>สูงสุด</option><option>1080p</option><option>720p</option></select>
+      </label>
+      <label class="chk NEW px-1"><input type="checkbox" checked=""> คำบรรยาย
+        <select style="margin-left:2px"><option>en,th</option><option>ทั้งหมด</option><option>อังกฤษ</option></select>
+      </label>
+      <label class="flex items-center gap-1">เก็บที่
+        <select><option>ยังไม่จัดหมวด</option><option>เพลง</option></select>
+      </label>
+    </div>
+  </div>
+  <!-- list -->
+  <main class="px-4 py-3 space-y-2" style="background:var(--bg)">
+    <!-- single video row (mkv + subtitle badge) -->
+    <div class="flex items-center gap-3 panel border line rounded-xl p-3">
+      <div class="relative w-20 h-12 rounded-lg overflow-hidden grid place-items-center" style="background:rgba(11,136,238,.10)">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="play" aria-hidden="true" style="color:var(--green);width:20px;height:20px" class="lucide lucide-play"><path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"></path></svg>
+        <span class="absolute bottom-0.5 right-0.5 text-[9px] px-1 rounded text-white" style="background:rgba(0,0,0,.6)">1080p</span>
+      </div>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2">
+          <p class="ink text-[13px] font-medium truncate">รีวิว Framework 13 — ซ่อมเองได้ทุกชิ้น</p>
+          <span class="text-[11px] px-2 py-0.5 rounded-full" style="background:rgba(56,203,137,.16);color:var(--ok-d)">เสร็จ</span>
+          <span class="tag">.mkv</span><span class="tag"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="captions" aria-hidden="true" style="width:11px;height:11px" class="lucide lucide-captions"><rect width="18" height="14" x="3" y="5" rx="2" ry="2"></rect><path d="M7 15h4M15 15h2M7 11h2M13 11h4"></path></svg> ซับ</span>
+        </div>
+        <p class="muted text-xs mt-0.5 truncate">รีวิว · 412.6M · <span class="NEW" style="padding:0 4px">mkv · ซับ en,th ฝังในไฟล์</span></p>
+      </div>
+      <div class="shrink-0 flex items-center gap-1">
+        <button class="pill grid place-items-center w-8 h-8 rounded-lg"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="folder-open" aria-hidden="true" class="lucide lucide-folder-open"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"></path></svg></button>
+        <button class="pill grid place-items-center w-8 h-8 rounded-lg"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="trash-2" aria-hidden="true" class="lucide lucide-trash-2"><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path><path d="M3 6h18"></path><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>
+      </div>
+    </div>
+  </main>
+</div>
+<p class="note muted">
+  <b class="ink">เพิ่มในแถบเครื่องมือ:</b> select <code>รูปแบบ</code> (โหมดวิดีโอ = MP4/MKV) และ checkbox <code>คำบรรยาย</code> + เลือกภาษา (en,th / ทั้งหมด).
+  ในแถวรายการมี badge <code>.mkv</code> และ <code>ซับ</code> + บรรทัดย่อยบอก ext จริง. ค่าทั้งหมดจำอัตโนมัติเหมือน mode/คุณภาพ/หมวด เดิม.
+</p>
+
+<!-- ============ STATE B: AUDIO MODE ============ -->
+<div class="swimsep">B · โหมดเสียง — toolbar สลับเป็น mp3/m4a/ogg + คุณภาพเสียง</div>
+<div class="app">
+  <div class="flex items-center gap-2 px-4 py-2.5 border-b line panel flex-wrap">
+    <button class="btn-green text-white font-semibold text-[13px] rounded-lg pl-3 pr-4 py-2 flex items-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="clipboard-paste" aria-hidden="true" style="color:#fff" class="lucide lucide-clipboard-paste"><path d="M11 14h10"></path><path d="M16 4h2a2 2 0 0 1 2 2v1.344"></path><path d="m17 18 4-4-4-4"></path><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 1.793-1.113"></path><rect x="8" y="2" width="8" height="4" rx="1"></rect></svg> วางลิงก์</button>
+    <button class="grid place-items-center w-9 h-9 rounded-lg border line pill" style="background:rgba(11,136,238,.14);color:var(--green-d)"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="lightbulb" aria-hidden="true" class="lucide lucide-lightbulb"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"></path><path d="M9 18h6"></path><path d="M10 22h4"></path></svg></button>
+    <div class="h-6 w-px" style="background:var(--line)"></div>
+    <div class="flex items-center gap-x-3 gap-y-1.5 text-[13px] flex-wrap muted">
+      <label class="flex items-center gap-1">โหลด
+        <select><option selected="">เสียง</option><option>วิดีโอ</option></select>
+      </label>
+      <label class="flex items-center gap-1 NEW">รูปแบบ
+        <select><option>MP3</option><option>M4A</option><option>OGG</option></select>
+      </label>
+      <label class="flex items-center gap-1 NEW">คุณภาพเสียง
+        <select><option>สูงสุด (0)</option><option>ดี (3)</option><option>ประหยัด (7)</option></select>
+      </label>
+      <label class="flex items-center gap-1">เก็บที่
+        <select><option>เพลง</option><option>ยังไม่จัดหมวด</option></select>
+      </label>
+    </div>
+  </div>
+  <main class="px-4 py-3 space-y-2" style="background:var(--bg)">
+    <div class="flex items-center gap-3 panel border line rounded-xl p-3">
+      <div class="relative w-20 h-12 rounded-lg overflow-hidden grid place-items-center" style="background:rgba(11,136,238,.10)">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="music" aria-hidden="true" style="color:var(--green);width:20px;height:20px" class="lucide lucide-music"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
+        <span class="absolute bottom-0.5 right-0.5 text-[9px] px-1 rounded text-white" style="background:rgba(0,0,0,.6)">audio</span>
+      </div>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2">
+          <p class="ink text-[13px] font-medium truncate">lofi hip hop radio</p>
+          <span class="text-[11px] px-2 py-0.5 rounded-full" style="background:rgba(56,203,137,.16);color:var(--ok-d)">เสร็จ</span>
+          <span class="tag">.m4a</span>
+        </div>
+        <p class="muted text-xs mt-0.5 truncate">เพลง · 8.4M · <span class="NEW" style="padding:0 4px">m4a · คุณภาพ 0</span></p>
+      </div>
+      <div class="shrink-0 flex items-center gap-1">
+        <button class="pill grid place-items-center w-8 h-8 rounded-lg"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="folder-open" aria-hidden="true" class="lucide lucide-folder-open"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"></path></svg></button>
+        <button class="pill grid place-items-center w-8 h-8 rounded-lg"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="trash-2" aria-hidden="true" class="lucide lucide-trash-2"><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path><path d="M3 6h18"></path><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>
+      </div>
+    </div>
+  </main>
+</div>
+<p class="note muted">
+  <b class="ink">สลับตามโหมด:</b> พอเลือก <code>โหลด = เสียง</code> select <code>รูปแบบ</code> เปลี่ยนเป็น MP3/M4A/OGG และมี <code>คุณภาพเสียง</code> โผล่มา
+  (map เป็น <code>--audio-quality 0..10</code>). โหมดเสียงไม่มี "คำบรรยาย/คุณภาพวิดีโอ" — ลด clutter.
+</p>
+
+<!-- ============ STATE C: PLAYLIST ============ -->
+<div class="swimsep">C · Playlist — 1 แถว = ทั้ง list (Option A) · เลขลำดับ + subfolder + .m3u</div>
+<div class="app">
+  <div class="flex items-center gap-2 px-4 py-2.5 border-b line panel flex-wrap">
+    <button class="btn-green text-white font-semibold text-[13px] rounded-lg pl-3 pr-4 py-2 flex items-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="clipboard-paste" aria-hidden="true" style="color:#fff" class="lucide lucide-clipboard-paste"><path d="M11 14h10"></path><path d="M16 4h2a2 2 0 0 1 2 2v1.344"></path><path d="m17 18 4-4-4-4"></path><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 1.793-1.113"></path><rect x="8" y="2" width="8" height="4" rx="1"></rect></svg> วางลิงก์</button>
+    <button class="grid place-items-center w-9 h-9 rounded-lg border line pill" style="background:rgba(11,136,238,.14);color:var(--green-d)"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="lightbulb" aria-hidden="true" class="lucide lucide-lightbulb"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"></path><path d="M9 18h6"></path><path d="M10 22h4"></path></svg></button>
+    <div class="h-6 w-px" style="background:var(--line)"></div>
+    <div class="flex items-center gap-x-3 gap-y-1.5 text-[13px] flex-wrap muted">
+      <label class="flex items-center gap-1">โหลด<select><option>วิดีโอ</option></select></label>
+      <label class="flex items-center gap-1">รูปแบบ<select><option>MP4</option></select></label>
+      <label class="flex items-center gap-1">คุณภาพ<select><option>สูงสุด</option></select></label>
+      <label class="chk NEW px-1"><input type="checkbox" checked=""> <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="list-video" aria-hidden="true" style="width:15px;height:15px" class="lucide lucide-list-video"><path d="M21 5H3"></path><path d="M10 12H3"></path><path d="M10 19H3"></path><path d="M15 12.003a1 1 0 0 1 1.517-.859l4.997 2.997a1 1 0 0 1 0 1.718l-4.997 2.997a1 1 0 0 1-1.517-.86z"></path></svg> โหลดทั้ง playlist</label>
+      <label class="flex items-center gap-1">เก็บที่<select><option>คอร์สเรียน</option></select></label>
+    </div>
+  </div>
+  <main class="px-4 py-3 space-y-2" style="background:var(--bg)">
+    <!-- playlist row IN PROGRESS -->
+    <div class="flex items-center gap-3 panel border line rounded-xl p-3 NEW">
+      <div class="relative w-20 h-12 rounded-lg overflow-hidden grid place-items-center" style="background:rgba(11,136,238,.10)">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="list-video" aria-hidden="true" style="color:var(--green);width:22px;height:22px" class="lucide lucide-list-video"><path d="M21 5H3"></path><path d="M10 12H3"></path><path d="M10 19H3"></path><path d="M15 12.003a1 1 0 0 1 1.517-.859l4.997 2.997a1 1 0 0 1 0 1.718l-4.997 2.997a1 1 0 0 1-1.517-.86z"></path></svg>
+        <span class="absolute bottom-0.5 right-0.5 text-[9px] px-1 rounded text-white" style="background:rgba(0,0,0,.6)">12 คลิป</span>
+      </div>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2">
+          <p class="ink text-[13px] font-medium truncate">Rust 101 — เรียนจากศูนย์</p>
+          <span class="text-[11px] px-2 py-0.5 rounded-full" style="background:rgba(11,136,238,.14);color:var(--green-d)">3 / 12</span>
+          <span class="tag"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="list-video" aria-hidden="true" style="width:11px;height:11px" class="lucide lucide-list-video"><path d="M21 5H3"></path><path d="M10 12H3"></path><path d="M10 19H3"></path><path d="M15 12.003a1 1 0 0 1 1.517-.859l4.997 2.997a1 1 0 0 1 0 1.718l-4.997 2.997a1 1 0 0 1-1.517-.86z"></path></svg> playlist</span>
+        </div>
+        <p class="muted text-xs mt-0.5 truncate">คอร์สเรียน · กำลังโหลด “03 - Ownership &amp; Borrowing” · 67%</p>
+        <div class="h-1.5 rounded-full mt-2 overflow-hidden" style="background:var(--line)">
+          <div class="bar-fill h-full rounded-full" style="width:31%"></div>
+        </div>
+      </div>
+      <div class="shrink-0 flex items-center gap-1">
+        <button class="pill grid place-items-center w-8 h-8 rounded-lg"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="x" aria-hidden="true" class="lucide lucide-x"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button>
+      </div>
+    </div>
+    <!-- playlist row DONE -->
+    <div class="flex items-center gap-3 panel border line rounded-xl p-3">
+      <div class="relative w-20 h-12 rounded-lg overflow-hidden grid place-items-center" style="background:rgba(11,136,238,.10)">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="list-video" aria-hidden="true" style="color:var(--green);width:22px;height:22px" class="lucide lucide-list-video"><path d="M21 5H3"></path><path d="M10 12H3"></path><path d="M10 19H3"></path><path d="M15 12.003a1 1 0 0 1 1.517-.859l4.997 2.997a1 1 0 0 1 0 1.718l-4.997 2.997a1 1 0 0 1-1.517-.86z"></path></svg>
+        <span class="absolute bottom-0.5 right-0.5 text-[9px] px-1 rounded text-white" style="background:rgba(0,0,0,.6)">8 คลิป</span>
+      </div>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2">
+          <p class="ink text-[13px] font-medium truncate">สอนทำกับข้าว — ชุดอาหารไทย</p>
+          <span class="text-[11px] px-2 py-0.5 rounded-full" style="background:rgba(56,203,137,.16);color:var(--ok-d)">เสร็จ 8/8</span>
+          <span class="tag"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="list-music" aria-hidden="true" style="width:11px;height:11px" class="lucide lucide-list-music"><path d="M16 5H3"></path><path d="M11 12H3"></path><path d="M11 19H3"></path><path d="M21 16V5"></path><circle cx="18" cy="16" r="3"></circle></svg> .m3u</span>
+        </div>
+        <p class="muted text-xs mt-0.5 truncate NEW" style="display:inline-block;padding:0 4px">
+          ~/VDO/คอร์สเรียน/<b class="ink">สอนทำกับข้าว — ชุดอาหารไทย/</b> · 8 ไฟล์ + playlist.m3u
+        </p>
+      </div>
+      <div class="shrink-0 flex items-center gap-1">
+        <button class="pill grid place-items-center w-8 h-8 rounded-lg" title="เปิดโฟลเดอร์ playlist"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="folder-open" aria-hidden="true" class="lucide lucide-folder-open"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"></path></svg></button>
+        <button class="pill grid place-items-center w-8 h-8 rounded-lg"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="trash-2" aria-hidden="true" class="lucide lucide-trash-2"><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path><path d="M3 6h18"></path><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>
+      </div>
+    </div>
+  </main>
+</div>
+<p class="note muted">
+  <b class="ink">Playlist (Option A — 1 แถว/list):</b> เปิดด้วย checkbox <code>โหลดทั้ง playlist</code> (default ปิด = โหลดคลิปเดียวปลอดภัย).
+  badge โชว์ <code>N / M</code> เรียลไทม์ (parse "Downloading item N of M"), บรรทัดย่อยบอกคลิปที่กำลังโหลด.
+  เสร็จแล้วเปิดโฟลเดอร์ <code>~/VDO/&lt;หมวด&gt;/&lt;ชื่อ playlist&gt;/</code> ที่มีไฟล์เลขลำดับ <code>01 - …</code> + <code>playlist.m3u</code>.
+</p>
+
+<!-- ============ COVERAGE CHECK ============ -->
+<div class="swimsep">✓ เช็คความครบของ UX/UI เทียบ plan</div>
+<div class="app" style="padding:16px 18px">
+  <table style="width:100%;border-collapse:collapse;font-size:13px">
+    <tbody><tr style="text-align:left;color:var(--muted)"><th style="padding:6px 8px">ฟีเจอร์ plan</th><th style="padding:6px 8px">มี UI ไหน</th><th style="padding:6px 8px">control</th></tr>
+    <tr style="border-top:1px solid var(--line)"><td style="padding:6px 8px">MKV (P1)</td><td style="padding:6px 8px">A</td><td style="padding:6px 8px">select รูปแบบ + badge .mkv</td></tr>
+    <tr style="border-top:1px solid var(--line)"><td style="padding:6px 8px">M4A/OGG + คุณภาพเสียง (P1)</td><td style="padding:6px 8px">B</td><td style="padding:6px 8px">select รูปแบบ + คุณภาพเสียง</td></tr>
+    <tr style="border-top:1px solid var(--line)"><td style="padding:6px 8px">Subtitle (P1)</td><td style="padding:6px 8px">A</td><td style="padding:6px 8px">checkbox คำบรรยาย + เลือกภาษา + badge ซับ</td></tr>
+    <tr style="border-top:1px solid var(--line)"><td style="padding:6px 8px">Playlist โหลดทั้ง list (P2)</td><td style="padding:6px 8px">C</td><td style="padding:6px 8px">checkbox โหลดทั้ง playlist</td></tr>
+    <tr style="border-top:1px solid var(--line)"><td style="padding:6px 8px">เลขลำดับคลิป (P2)</td><td style="padding:6px 8px">C</td><td style="padding:6px 8px">ชื่อไฟล์ 01 - … (ใน subfolder)</td></tr>
+    <tr style="border-top:1px solid var(--line)"><td style="padding:6px 8px">subfolder ตาม playlist (P2)</td><td style="padding:6px 8px">C</td><td style="padding:6px 8px">path ในแถว done</td></tr>
+    <tr style="border-top:1px solid var(--line)"><td style="padding:6px 8px">.m3u (P2)</td><td style="padding:6px 8px">C</td><td style="padding:6px 8px">badge .m3u + เปิดโฟลเดอร์</td></tr>
+    <tr style="border-top:1px solid var(--line)"><td style="padding:6px 8px">progress รวม N/M (P2)</td><td style="padding:6px 8px">C</td><td style="padding:6px 8px">badge 3/12 + bar รวม</td></tr>
+  </tbody></table>
+</div>
+
+<p class="note muted" style="margin-bottom:40px">
+  <b class="ink">จุดที่ยังต้องคุณเบิร์ดตัดสิน:</b>
+  ① ภาษาซับ default ควรเป็น <code>en,th</code> หรือ <code>ทั้งหมด</code>? ·
+  ② playlist อยากให้เป็น <b>1 แถว/list (Option A นี้)</b> หรือ <b>แตกเป็น N แถวย่อย (Option B)</b>? ·
+  ③ toolbar เริ่มแน่นขึ้น (7 control) — โอเคไหม หรือย้าย "รูปแบบ/คุณภาพเสียง/ซับ" ไปไว้ใน composer (กล่องวาง URL) แทน?
+</p>
+
+<script>
+  lucide.createIcons();
+  function tog(){ const h=document.documentElement; h.classList.toggle('dark'); h.classList.toggle('light'); }
+</script>
+
+
+</body></html>
