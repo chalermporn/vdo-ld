@@ -79,15 +79,24 @@ fn vdo_root() -> String {
 
 /// ดึงชื่อเรื่อง + thumbnail จาก URL (เติมให้อัตโนมัติ)
 #[tauri::command]
-fn probe_meta(url: String) -> Result<Meta, String> {
-    let (title, thumbnail) = core::probe_meta(&url)?;
+fn probe_meta(
+    url: String,
+    cookies_browser: Option<String>,
+    cookies_file: Option<String>,
+) -> Result<Meta, String> {
+    let (title, thumbnail) = core::probe_meta(&url, &core::Cookies::from(cookies_browser, cookies_file))?;
     Ok(Meta { title, thumbnail })
 }
 
 /// ดึงข้อมูล playlist (ชื่อ + รายชื่อคลิป) เพื่อ pre-create แถวลูก (Option B)
 #[tauri::command]
-fn playlist_probe(url: String) -> Result<PlaylistInfo, String> {
-    let (title, entries) = core::probe_playlist(&url)?;
+fn playlist_probe(
+    url: String,
+    cookies_browser: Option<String>,
+    cookies_file: Option<String>,
+) -> Result<PlaylistInfo, String> {
+    let (title, entries) =
+        core::probe_playlist(&url, &core::Cookies::from(cookies_browser, cookies_file))?;
     Ok(PlaylistInfo { title, entries })
 }
 
@@ -134,7 +143,10 @@ async fn download_video(
     subs: bool,
     sub_langs: String,
     playlist: bool,
+    cookies_browser: Option<String>,
+    cookies_file: Option<String>,
 ) -> Result<DownloadResult, String> {
+    let cookies = core::Cookies::from(cookies_browser, cookies_file);
     let map = jobs.0.clone(); // clone Arc ก่อน await (ไม่ถือ State ข้าม await)
     let flag = Arc::new(AtomicBool::new(false));
     map.lock().unwrap().insert(id, flag.clone());
@@ -155,7 +167,7 @@ async fn download_video(
             if !title.trim().is_empty() {
                 title.clone()
             } else {
-                core::probe_playlist(&url).map(|(t, _)| t).unwrap_or_else(|_| "playlist".into())
+                core::probe_playlist(&url, &cookies).map(|(t, _)| t).unwrap_or_else(|_| "playlist".into())
             }
         } else {
             String::new()
@@ -223,6 +235,7 @@ async fn download_video(
             subs,
             sub_langs,
             playlist,
+            cookies,
         };
         let items = core::download(&tools, &url, &core::vdo_root().join("tmp"), &opts, &flag, &on)?;
 

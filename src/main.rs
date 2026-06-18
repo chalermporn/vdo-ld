@@ -10,7 +10,8 @@ use std::process::Command;
 use std::sync::atomic::AtomicBool;
 use vdo_dl::{
     download, ensure_tools, file_into, file_into_dir, human_size, probe_playlist, update,
-    vdo_root, verify, write_m3u, ytdlp_path, AudioFmt, Container, DlEvent, DownloadOpts, VResult,
+    vdo_root, verify, write_m3u, ytdlp_path, AudioFmt, Container, Cookies, DlEvent, DownloadOpts,
+    VResult,
 };
 
 fn color_on() -> bool {
@@ -50,6 +51,9 @@ Options:
   --audio-quality N    เสียง: 0(ดีสุด)..10 (ไม่ใส่ = ค่า default)
   --subs[=LANGS]       วิดีโอ: ดาวน์โหลด+ฝังคำบรรยาย (ไม่ระบุ = en,th)
   --playlist           โหลดทั้ง playlist → ~/VDO/<หมวด>/<ชื่อ/playlist>/ + .m3u
+  --cookies-from-browser B   ใช้คุกกี้จากเบราว์เซอร์ (chrome|safari|firefox|edge|brave|…)
+                             สำหรับเนื้อหาที่ต้องล็อกอิน (เช่น คอร์สที่ enroll, ไม่มี DRM)
+  --cookies FILE             ใช้คุกกี้จากไฟล์ cookies.txt (Netscape)
 
 ครั้งแรกที่รัน ถ้าเครื่องไม่มี yt-dlp/ffmpeg จะโหลดมาเก็บเองที่ <data>/vdo-dl/bin/.
 Env: VDO_ROOT, VDO_BIN, NO_COLOR";
@@ -110,6 +114,22 @@ fn run() -> VResult<()> {
                 opts.sub_langs = s[7..].to_string();
             }
             "--playlist" => opts.playlist = true,
+            "--cookies-from-browser" => {
+                if let Some(b) = it.next() {
+                    opts.cookies = Cookies::Browser(b.clone());
+                }
+            }
+            s if s.starts_with("--cookies-from-browser=") => {
+                opts.cookies = Cookies::Browser(s[23..].to_string());
+            }
+            "--cookies" => {
+                if let Some(f) = it.next() {
+                    opts.cookies = Cookies::File(f.into());
+                }
+            }
+            s if s.starts_with("--cookies=") => {
+                opts.cookies = Cookies::File(s[10..].into());
+            }
             s => pos.push(s),
         }
     }
@@ -151,7 +171,7 @@ fn run() -> VResult<()> {
         let subfolder = if !title.is_empty() {
             title.to_string()
         } else {
-            probe_playlist(url).map(|(t, _)| t).unwrap_or_else(|_| "playlist".into())
+            probe_playlist(url, &opts.cookies).map(|(t, _)| t).unwrap_or_else(|_| "playlist".into())
         };
         let mut dests = vec![];
         for (_idx, src) in &items {

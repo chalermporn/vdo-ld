@@ -64,6 +64,35 @@ impl AudioFmt {
     }
 }
 
+/// แหล่งคุกกี้สำหรับเนื้อหาที่ต้องล็อกอิน (เช่น คอร์สที่ enroll). หมายเหตุความเป็นส่วนตัว:
+/// เก็บแค่ "ที่มา" (ชื่อเบราว์เซอร์/path ไฟล์) — yt-dlp อ่านตัวคุกกี้สดเอง เราไม่แตะ/ไม่เก็บ token
+#[derive(Clone, Default)]
+pub enum Cookies {
+    #[default]
+    None,
+    Browser(String), // brave|chrome|chromium|edge|firefox|opera|safari|vivaldi|whale
+    File(PathBuf),   // cookies.txt (Netscape format)
+}
+impl Cookies {
+    /// สร้างจากค่าที่ frontend ส่งมา (เลือก browser ก่อน, ถ้าไม่มีลอง file)
+    pub fn from(browser: Option<String>, file: Option<String>) -> Cookies {
+        match (browser, file) {
+            (Some(b), _) if !b.trim().is_empty() => Cookies::Browser(b.trim().to_string()),
+            (_, Some(f)) if !f.trim().is_empty() => Cookies::File(PathBuf::from(f)),
+            _ => Cookies::None,
+        }
+    }
+}
+
+/// args ของ yt-dlp สำหรับคุกกี้ (ว่าง = ไม่ใช้)
+pub fn cookie_args(c: &Cookies) -> Vec<String> {
+    match c {
+        Cookies::None => vec![],
+        Cookies::Browser(b) => vec!["--cookies-from-browser".into(), b.clone()],
+        Cookies::File(p) => vec!["--cookies".into(), p.display().to_string()],
+    }
+}
+
 /// ตัวเลือกการโหลด. หมายเหตุ: ไม่ derive Copy แล้ว เพราะมี sub_langs:String
 #[derive(Clone, Default)]
 pub struct DownloadOpts {
@@ -75,6 +104,7 @@ pub struct DownloadOpts {
     pub subs: bool,                 // ดาวน์โหลด+ฝังคำบรรยาย (เฉพาะวิดีโอ)
     pub sub_langs: String,          // ภาษาซับ เช่น "en,th" หรือ "all" (ว่าง = ข้าม แม้ subs=true)
     pub playlist: bool,             // true = โหลดทั้ง playlist (default false = คลิปเดียว)
+    pub cookies: Cookies,           // คุกกี้สำหรับเนื้อหาที่ต้องล็อกอิน
 }
 
 /// สร้าง args ของ yt-dlp สำหรับ format + subtitle (แยกเป็นฟังก์ชันบริสุทธิ์เพื่อ unit-test)
@@ -505,6 +535,7 @@ pub fn download(
     }
 
     cmd.args(build_format_args(opts));
+    cmd.args(cookie_args(&opts.cookies));
     ffmpeg_location_arg(&mut cmd, &tools.ffmpeg);
 
     let mut child = cmd
@@ -519,6 +550,8 @@ pub fn download(
     let stdout = child.stdout.take().unwrap();
     let mut items: Vec<(Option<u32>, PathBuf)> = Vec::new();
     let done = AtomicBool::new(false);
+    // เก็บบรรทัด ERROR ล่าสุดไว้แปลงเป็นข้อความที่อ่านง่ายตอนล้มเหลว
+    let last_err = std::sync::Mutex::new(String::new());
 
     std::thread::scope(|s| {
         // watcher: ยกเลิก → kill yt-dlp
@@ -536,6 +569,10 @@ pub fn download(
             for line in BufReader::new(stderr).lines().map_while(Result::ok) {
                 let t = line.trim();
                 if !t.is_empty() {
+                    let low = t.to_lowercase();
+                    if low.contains("error") || low.contains("drm") || low.contains("forbidden") {
+                        *last_err.lock().unwrap() = t.to_string();
+                    }
                     on(DlEvent::Status { index: None, line: t });
                 }
             }
@@ -577,12 +614,38 @@ pub fn download(
     }
     // playlist ใช้ -i: บาง item พังได้แต่ถ้าได้อย่างน้อย 1 ไฟล์ถือว่าสำเร็จบางส่วน
     if items.is_empty() {
-        if !status.success() {
-            return Err("yt-dlp โหลดไม่สำเร็จ".into());
+        let raw = last_err.lock().unwrap().clone();
+        if !status.success() || !raw.is_empty() {
+            return Err(friendly_error(&raw));
         }
         return Err("yt-dlp ไม่ได้พิมพ์ path ของไฟล์ผลลัพธ์".into());
     }
     Ok(items)
+}
+
+/// แปลง error ดิบจาก yt-dlp เป็นข้อความที่ผู้ใช้เข้าใจ (DRM / 403 / Udemy / ต้องล็อกอิน)
+pub fn friendly_error(raw: &str) -> String {
+    let low = raw.to_lowercase();
+    if low.contains("drm") {
+        "วิดีโอมี DRM — ดาวน์โหลดไม่ได้ (ดูในแอปทางการเท่านั้น)".into()
+    } else if low.contains("udemy")
+        && (low.contains("403") || low.contains("forbidden") || low.contains("course id"))
+    {
+        "Udemy Business โหลดไม่ได้ — Udemy บล็อก yt-dlp (403) และเนื้อหามักมี DRM".into()
+    } else if low.contains("403") || low.contains("forbidden") {
+        "เซิร์ฟเวอร์บล็อก (403 Forbidden) — เนื้อหานี้โหลดไม่ได้".into()
+    } else if low.contains("login")
+        || low.contains("sign in")
+        || low.contains("private")
+        || low.contains("members-only")
+        || low.contains("registered users")
+    {
+        "ต้องล็อกอิน — ลองตั้งคุกกี้ในเมนูตั้งค่า (บัญชี/คุกกี้)".into()
+    } else if !raw.trim().is_empty() {
+        format!("yt-dlp: {}", raw.trim_start_matches("ERROR:").trim())
+    } else {
+        "yt-dlp โหลดไม่สำเร็จ".into()
+    }
 }
 
 // ---------- verify ----------
@@ -683,15 +746,16 @@ pub fn write_m3u(dir: &Path, name: &str, files: &[PathBuf]) -> VResult<PathBuf> 
 }
 
 /// ดึงข้อมูล playlist แบบเร็ว (ไม่โหลดวิดีโอ) → (ชื่อ playlist, รายชื่อ title แต่ละ entry)
-/// ใช้ทำ subfolder + pre-create แถวลูกใน GUI (Option B)
-pub fn probe_playlist(url: &str) -> VResult<(String, Vec<String>)> {
+/// ใช้ทำ subfolder + pre-create แถวลูกใน GUI (Option B). ต้องส่ง cookies ด้วยถ้า playlist
+/// อยู่หลัง login (เช่น udemy:course)
+pub fn probe_playlist(url: &str, cookies: &Cookies) -> VResult<(String, Vec<String>)> {
     let yt = find_tool("yt-dlp", "--version").ok_or("ยังไม่มี yt-dlp")?;
-    let out = Command::new(yt)
-        .args(["--flat-playlist", "--no-warnings"])
+    let mut cmd = Command::new(yt);
+    cmd.args(["--flat-playlist", "--no-warnings"])
         .args(["--print", "%(playlist_title)s:::%(title)s"])
-        .arg(url)
-        .output()
-        .map_err(|e| format!("รัน yt-dlp ไม่ได้: {}", e))?;
+        .args(cookie_args(cookies))
+        .arg(url);
+    let out = cmd.output().map_err(|e| format!("รัน yt-dlp ไม่ได้: {}", e))?;
     let text = String::from_utf8_lossy(&out.stdout);
     let mut pl_title = String::new();
     let mut entries = Vec::new();
@@ -738,14 +802,14 @@ pub fn update(log: &Log) -> VResult<()> {
 
 // ---------- meta / OS helpers ----------
 /// ดึง (ชื่อเรื่อง, URL รูป thumbnail) จาก URL โดยไม่โหลดวิดีโอ
-pub fn probe_meta(url: &str) -> VResult<(String, String)> {
+pub fn probe_meta(url: &str, cookies: &Cookies) -> VResult<(String, String)> {
     let yt = find_tool("yt-dlp", "--version").ok_or("ยังไม่มี yt-dlp")?;
-    let out = Command::new(yt)
-        .args(["--skip-download", "--no-warnings", "--no-playlist"])
+    let mut cmd = Command::new(yt);
+    cmd.args(["--skip-download", "--no-warnings", "--no-playlist"])
         .args(["--print", "%(title)s", "--print", "%(thumbnail)s"])
-        .arg(url)
-        .output()
-        .map_err(|e| format!("รัน yt-dlp ไม่ได้: {}", e))?;
+        .args(cookie_args(cookies))
+        .arg(url);
+    let out = cmd.output().map_err(|e| format!("รัน yt-dlp ไม่ได้: {}", e))?;
     let text = String::from_utf8_lossy(&out.stdout);
     let mut lines = text.lines().filter(|l| !l.trim().is_empty());
     let title = lines.next().unwrap_or("").trim().to_string();
@@ -902,5 +966,36 @@ mod tests {
         assert_eq!(Container::parse("webm"), Container::Mp4);
         assert_eq!(AudioFmt::parse("OGG"), AudioFmt::Ogg);
         assert_eq!(AudioFmt::parse("flac"), AudioFmt::Mp3);
+    }
+
+    #[test]
+    fn friendly_error_maps_common_cases() {
+        assert!(friendly_error("ERROR: [udemy:course] course: HTTP Error 403: Forbidden").contains("Udemy"));
+        assert!(friendly_error("ERROR: This video is DRM protected").contains("DRM"));
+        assert!(friendly_error("ERROR: HTTP Error 403: Forbidden").contains("403"));
+        assert!(friendly_error("ERROR: Please sign in to view").contains("ล็อกอิน"));
+        assert!(friendly_error("").contains("ไม่สำเร็จ"));
+        // error อื่นๆ คงข้อความดิบไว้ (ตัด ERROR: ออก)
+        assert!(friendly_error("ERROR: Video unavailable").contains("Video unavailable"));
+    }
+
+    #[test]
+    fn cookies_build_and_args() {
+        assert!(matches!(Cookies::from(None, None), Cookies::None));
+        assert!(matches!(Cookies::from(Some("  ".into()), None), Cookies::None));
+        assert!(cookie_args(&Cookies::None).is_empty());
+        assert_eq!(
+            cookie_args(&Cookies::from(Some("chrome".into()), None)),
+            vec!["--cookies-from-browser", "chrome"]
+        );
+        // browser ชนะ file ถ้าใส่มาทั้งคู่
+        assert_eq!(
+            cookie_args(&Cookies::from(Some("safari".into()), Some("/x/c.txt".into()))),
+            vec!["--cookies-from-browser", "safari"]
+        );
+        assert_eq!(
+            cookie_args(&Cookies::from(None, Some("/x/c.txt".into()))),
+            vec!["--cookies", "/x/c.txt"]
+        );
     }
 }

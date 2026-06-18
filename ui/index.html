@@ -117,7 +117,30 @@
         <span class="muted">เครื่องมือ (yt-dlp / ffmpeg)</span>
         <button onclick="doUpdate()" class="btn-green text-white rounded-md px-3 py-1.5 flex items-center gap-1.5 shrink-0"><i data-lucide="refresh-cw" style="color:#fff;width:14px;height:14px"></i> อัปเดต</button>
       </div>
-      <p class="muted text-xs">ค่า โหมด/คุณภาพ/หมวด ถูกจำอัตโนมัติเมื่อเปลี่ยน</p>
+
+      <!-- บัญชี / คุกกี้ -->
+      <div class="rounded-lg p-3 mt-1" style="background:var(--panel);border:1px solid var(--line)">
+        <div class="flex items-center gap-2 mb-2">
+          <i data-lucide="key-round" style="width:15px;height:15px;color:var(--green)"></i>
+          <span class="ink font-semibold">บัญชี / คุกกี้</span>
+          <span class="muted text-xs ml-auto">สำหรับเนื้อหาที่ต้องล็อกอิน (เช่น คอร์สที่ enroll)</span>
+        </div>
+        <div class="space-y-1.5">
+          <label class="flex items-center gap-2"><input type="radio" name="ck" value="none" checked style="accent-color:var(--green)"> ไม่ใช้คุกกี้ <span class="muted text-xs">(default)</span></label>
+          <label class="flex items-center gap-2"><input type="radio" name="ck" value="browser" style="accent-color:var(--green)"> ดึงจากเบราว์เซอร์
+            <select id="ckbrowser"><option>chrome</option><option>safari</option><option>firefox</option><option>edge</option><option>brave</option><option>chromium</option><option>opera</option><option>vivaldi</option></select>
+          </label>
+          <label class="flex items-center gap-2"><input type="radio" name="ck" value="file" style="accent-color:var(--green)"> ไฟล์ cookies.txt
+            <input id="ckfile" placeholder="/path/to/cookies.txt" class="flex-1 min-w-0 px-2 py-1 text-xs" />
+          </label>
+        </div>
+        <p class="muted text-xs mt-2 flex items-start gap-1.5">
+          <i data-lucide="info" style="width:13px;height:13px;margin-top:2px"></i>
+          <span>macOS: ดึงจาก Chrome อาจต้อง <b class="ink">ปิด Chrome ก่อน</b> หรือเด้งขออนุญาต keychain · เราจำแค่ตัวเลือก ไม่เก็บตัวคุกกี้ · เนื้อหาที่มี DRM โหลดไม่ได้ (จะข้ามให้)</span>
+        </p>
+      </div>
+
+      <p class="muted text-xs">ค่า โหมด/คุณภาพ/หมวด/คุกกี้ ถูกจำอัตโนมัติเมื่อเปลี่ยน</p>
     </div>
   </div>
 
@@ -169,7 +192,16 @@ let uid = 1;
 let activeTab = 'all';
 let smart = true;
 const LS = { rows:'vdo_rows', mode:'vdo_mode', quality:'vdo_quality', cat:'vdo_cat', smart:'vdo_smart', theme:'vdo_theme',
-  vfmt:'vdo_vfmt', afmt:'vdo_afmt', aquality:'vdo_aquality', subs:'vdo_subs', sublangs:'vdo_sublangs', plist:'vdo_plist' };
+  vfmt:'vdo_vfmt', afmt:'vdo_afmt', aquality:'vdo_aquality', subs:'vdo_subs', sublangs:'vdo_sublangs', plist:'vdo_plist',
+  ckmode:'vdo_ckmode', ckbrowser:'vdo_ckbrowser', ckfile:'vdo_ckfile' };
+
+// คุกกี้ที่จะส่งไปทุก invoke (จำแค่ตัวเลือก/path ไม่เก็บตัวคุกกี้)
+function cookieArgs(){
+  const mode = (document.querySelector('input[name=ck]:checked')||{}).value || 'none';
+  if(mode==='browser') return { cookiesBrowser: $('ckbrowser').value, cookiesFile: null };
+  if(mode==='file'){ const f=($('ckfile').value||'').trim(); return { cookiesBrowser:null, cookiesFile: f||null }; }
+  return { cookiesBrowser:null, cookiesFile:null };
+}
 
 // สลับชุด control ตามโหมด: วิดีโอ→mp4/mkv+คุณภาพ+ซับ, เสียง→mp3/m4a/ogg+คุณภาพเสียง
 function syncMode(){
@@ -274,7 +306,7 @@ function childHtml(c){
   const badge = c.state==='done'
     ? `<span class="text-[11px] px-2 py-0.5 rounded-full" style="background:rgba(56,203,137,.16);color:var(--ok-d)">เสร็จ</span>`
     : c.state==='skip'
-    ? `<span class="text-[11px] px-2 py-0.5 rounded-full" style="background:rgba(245,158,11,.16);color:#d97706">ข้าม</span>`
+    ? `<span class="text-[11px] px-2 py-0.5 rounded-full" style="background:rgba(245,158,11,.16);color:#d97706">${/drm/i.test(c.err||'')?'ข้าม · DRM':'ข้าม'}</span>`
     : c.state==='dl'
     ? `<span class="text-[11px] muted">${c.pct>=100?'merge…':Math.round(c.pct||0)+'%'}</span>`
     : `<span class="text-[11px] px-2 py-0.5 rounded-full" style="background:var(--hover);color:var(--muted)">รอคิว</span>`;
@@ -352,11 +384,11 @@ async function startDownload(url, title){
 
   if(!inTauri) return demo(row);
 
-  invoke('probe_meta',{url}).then(m=>{ if(m){ if(row.title==='(ยังไม่ตั้งชื่อ)'&&m.title){row.title=m.title;} row.thumb=m.thumbnail; render(); } }).catch(()=>{});
+  invoke('probe_meta',{url, ...cookieArgs()}).then(m=>{ if(m){ if(row.title==='(ยังไม่ตั้งชื่อ)'&&m.title){row.title=m.title;} row.thumb=m.thumbnail; render(); } }).catch(()=>{});
 
   try{
     const res=await invoke('download_video',{ id:row.id, url, title, category:o.cat, audio:o.audio, maxHeight:o.maxHeight,
-      container:o.container, audioFmt:o.audioFmt, audioQuality:o.audioQuality, subs:o.subs, subLangs:o.subLangs });
+      container:o.container, audioFmt:o.audioFmt, audioQuality:o.audioQuality, subs:o.subs, subLangs:o.subLangs, playlist:false, ...cookieArgs() });
     row.state='done';
     row.res = res.height && res.height!=='?' ? res.height+'p' : (o.audio?'audio':'—');
     row.size=res.size; row.path=res.path;
@@ -387,7 +419,7 @@ async function startPlaylist(url, title){
 
   // ดึงรายชื่อคลิปมา pre-create แถวลูก
   let info;
-  try{ info = await invoke('playlist_probe',{url}); }
+  try{ info = await invoke('playlist_probe',{url, ...cookieArgs()}); }
   catch(e){ parent.state='error'; parent.err='ดึง playlist ไม่ได้: '+String(e?.message||e); render(); return; }
   parent.title = title || info.title || '(playlist)';
   parent.count = info.entries.length;
@@ -398,10 +430,10 @@ async function startPlaylist(url, title){
 
   try{
     const res=await invoke('download_video',{ id:pid, url, title:parent.title, category:o.cat, audio:o.audio, maxHeight:o.maxHeight,
-      container:o.container, audioFmt:o.audioFmt, audioQuality:o.audioQuality, subs:o.subs, subLangs:o.subLangs, playlist:true });
+      container:o.container, audioFmt:o.audioFmt, audioQuality:o.audioQuality, subs:o.subs, subLangs:o.subLangs, playlist:true, ...cookieArgs() });
     parent.state='done'; parent.path=res.path; parent.count=res.count;
-    // ลูกที่ไม่ได้ไฟล์ (ไม่เคยเสร็จ) → ถือว่าข้าม
-    rows.filter(c=>c.parentId===pid && c.state!=='done').forEach(c=>{ c.state='skip'; if(!c.err) c.err='ไม่ได้ไฟล์'; });
+    // ลูกที่ไม่ได้ไฟล์ (ไม่เคยเสร็จ) → ถือว่าข้าม (ถ้า job เจอ DRM ระบุว่าเป็น DRM)
+    rows.filter(c=>c.parentId===pid && c.state!=='done').forEach(c=>{ c.state='skip'; if(!c.err) c.err = parent._drm ? 'วิดีโอมี DRM — โหลดไม่ได้' : 'ไม่ได้ไฟล์'; });
     setStat('playlist เสร็จ · '+res.count+' ไฟล์ · '+res.path);
   }catch(e){
     const msg=String(e?.message||e);
@@ -442,7 +474,7 @@ function onUrl(){
   if(!isUrl(url)) return;
   metaTimer=setTimeout(async()=>{
     $('metahint').classList.remove('hidden');
-    try{ const m=await invoke('probe_meta',{url}); if(m && !$('title').value.trim()){ $('title').value=m.title; } }catch(e){}
+    try{ const m=await invoke('probe_meta',{url, ...cookieArgs()}); if(m && !$('title').value.trim()){ $('title').value=m.title; } }catch(e){}
     $('metahint').classList.add('hidden');
   },600);
 }
@@ -526,6 +558,10 @@ async function init(){
   if(localStorage.getItem(LS.subs)==='1') $('subs').checked=true;
   if(localStorage.getItem(LS.plist)==='1') $('plist').checked=true;
   const sl=localStorage.getItem(LS.sublangs); if(sl) $('sublangs').value=sl;
+  // restore คุกกี้ (แค่ตัวเลือก/path — ไม่เคยเก็บตัวคุกกี้)
+  const ckm=localStorage.getItem(LS.ckmode); if(ckm){ const el=document.querySelector(`input[name=ck][value="${ckm}"]`); if(el) el.checked=true; }
+  const ckb=localStorage.getItem(LS.ckbrowser); if(ckb && [...$('ckbrowser').options].some(o=>o.value===ckb)) $('ckbrowser').value=ckb;
+  const ckf=localStorage.getItem(LS.ckfile); if(ckf) $('ckfile').value=ckf;
   syncMode();
 
   $('mode').addEventListener('change',()=>{ localStorage.setItem(LS.mode,$('mode').value); syncMode(); });
@@ -535,6 +571,9 @@ async function init(){
   $('subs').addEventListener('change',()=>localStorage.setItem(LS.subs,$('subs').checked?'1':'0'));
   $('sublangs').addEventListener('change',()=>localStorage.setItem(LS.sublangs,$('sublangs').value));
   $('plist').addEventListener('change',()=>localStorage.setItem(LS.plist,$('plist').checked?'1':'0'));
+  document.querySelectorAll('input[name=ck]').forEach(el=>el.addEventListener('change',()=>localStorage.setItem(LS.ckmode,el.value)));
+  $('ckbrowser').addEventListener('change',()=>localStorage.setItem(LS.ckbrowser,$('ckbrowser').value));
+  $('ckfile').addEventListener('change',()=>localStorage.setItem(LS.ckfile,$('ckfile').value.trim()));
 
   $('tabs').querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
     activeTab=b.dataset.tab;
@@ -576,7 +615,12 @@ async function init(){
     if(c){ c.state='done'; c.pct=100; c.path=path; c.size=size; if(height && height!=='?') c.res=height+'p'; render(); }
   });
   listen('vdo://status', e=>{ const t=e.payload.text||''; setStat(t);
-    const r=rows.find(x=>x.id===e.payload.id); if(r && !r.isGroup && /merge|ตรวจไฟล์/.test(t) && r.state==='dl'){ r.state='merge'; render(); } });
+    const r=rows.find(x=>x.id===e.payload.id);
+    if(r){
+      if(/drm/i.test(t)) r._drm=true;  // job เจอ DRM → ใช้ระบุเหตุผลของลูกที่ข้าม
+      if(!r.isGroup && /merge|ตรวจไฟล์/.test(t) && r.state==='dl'){ r.state='merge'; render(); }
+    }
+  });
 }
 init();
 </script>
