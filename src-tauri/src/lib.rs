@@ -102,6 +102,11 @@ async fn download_video(
     category: String,
     audio: bool,
     max_height: Option<u32>,
+    container: String,
+    audio_fmt: String,
+    audio_quality: Option<u8>,
+    subs: bool,
+    sub_langs: String,
 ) -> Result<DownloadResult, String> {
     let map = jobs.0.clone(); // clone Arc ก่อน await (ไม่ถือ State ข้าม await)
     let flag = Arc::new(AtomicBool::new(false));
@@ -124,7 +129,15 @@ async fn download_video(
                 let _ = app.emit("vdo://progress", ProgressEvent { id, pct, text: line.to_string() });
             }
         };
-        let opts = core::DownloadOpts { audio, max_height };
+        let opts = core::DownloadOpts {
+            audio,
+            max_height,
+            container: core::Container::parse(&container),
+            audio_fmt: core::AudioFmt::parse(&audio_fmt),
+            audio_quality,
+            subs,
+            sub_langs,
+        };
         let file = core::download(&tools, &url, &core::vdo_root().join("tmp"), &opts, &flag, &on)?;
 
         let _ = app.emit("vdo://status", StatusEvent { id, text: "กำลัง merge / ตรวจไฟล์…".into() });

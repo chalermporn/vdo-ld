@@ -67,10 +67,20 @@
 
     <div class="flex items-center gap-x-3 gap-y-1.5 text-[13px] flex-wrap muted">
       <label class="flex items-center gap-1">โหลด
-        <select id="mode"><option value="video">วิดีโอ</option><option value="audio">เสียง (mp3)</option></select>
+        <select id="mode"><option value="video">วิดีโอ</option><option value="audio">เสียง</option></select>
       </label>
-      <label class="flex items-center gap-1">คุณภาพ
+      <label class="flex items-center gap-1">รูปแบบ
+        <select id="fmt"></select>
+      </label>
+      <label id="q-wrap" class="flex items-center gap-1">คุณภาพ
         <select id="quality"><option value="best">สูงสุด</option><option value="1080">1080p</option><option value="720">720p</option></select>
+      </label>
+      <label id="aq-wrap" class="flex items-center gap-1 hidden">คุณภาพเสียง
+        <select id="aquality"><option value="">สูงสุด</option><option value="0">ดีสุด (0)</option><option value="5">ปานกลาง (5)</option><option value="9">ประหยัด (9)</option></select>
+      </label>
+      <label id="subs-wrap" class="flex items-center gap-1" title="ดาวน์โหลด+ฝังคำบรรยายลงไฟล์">
+        <input type="checkbox" id="subs" style="width:14px;height:14px;accent-color:var(--green)"> ซับ
+        <select id="sublangs"><option value="en,th">en,th</option><option value="all">ทั้งหมด</option><option value="en">อังกฤษ</option><option value="th">ไทย</option></select>
       </label>
       <label class="flex items-center gap-1">เก็บที่
         <select id="cat"><option>ยังไม่จัดหมวด</option></select>
@@ -155,7 +165,22 @@ let rows = [];
 let uid = 1;
 let activeTab = 'all';
 let smart = true;
-const LS = { rows:'vdo_rows', mode:'vdo_mode', quality:'vdo_quality', cat:'vdo_cat', smart:'vdo_smart', theme:'vdo_theme' };
+const LS = { rows:'vdo_rows', mode:'vdo_mode', quality:'vdo_quality', cat:'vdo_cat', smart:'vdo_smart', theme:'vdo_theme',
+  vfmt:'vdo_vfmt', afmt:'vdo_afmt', aquality:'vdo_aquality', subs:'vdo_subs', sublangs:'vdo_sublangs' };
+
+// สลับชุด control ตามโหมด: วิดีโอ→mp4/mkv+คุณภาพ+ซับ, เสียง→mp3/m4a/ogg+คุณภาพเสียง
+function syncMode(){
+  const audio = $('mode').value==='audio';
+  const fmt = $('fmt');
+  fmt.innerHTML = audio
+    ? '<option value="mp3">MP3</option><option value="m4a">M4A</option><option value="ogg">OGG</option>'
+    : '<option value="mp4">MP4</option><option value="mkv">MKV</option>';
+  const saved = localStorage.getItem(audio?LS.afmt:LS.vfmt);
+  if(saved && [...fmt.options].some(o=>o.value===saved)) fmt.value=saved;
+  $('q-wrap').classList.toggle('hidden', audio);
+  $('aq-wrap').classList.toggle('hidden', !audio);
+  $('subs-wrap').classList.toggle('hidden', audio);
+}
 
 const $ = id => document.getElementById(id);
 const setStat = t => $('stat').textContent = t;
@@ -186,7 +211,8 @@ function rowHtml(r){
     <div class="h-1.5 rounded-full mt-2 overflow-hidden" style="background:var(--line)">
       <div class="bar-fill h-full rounded-full" style="width:${r.state==='merge'?100:(r.pct||0)}%;transition:width .3s"></div>
     </div>` : '';
-  const sub = r.state==='error' ? r.err : `${r.cat||''} · ${r.size||'—'} · ${r.kind==='audio'?'mp3':'mp4'}`;
+  const fmtLabel = r.fmt || (r.kind==='audio'?'mp3':'mp4');
+  const sub = r.state==='error' ? r.err : `${r.cat||''} · ${r.size||'—'} · ${fmtLabel}${r.subs?' · ซับ':''}`;
   let actions='';
   if(showBar){
     actions=`<button onclick="cancel(${r.id})" class="pill grid place-items-center w-8 h-8 rounded-lg" title="หยุด"><i data-lucide="x"></i></button>`;
@@ -229,14 +255,25 @@ function render(){
 function curOpts(){
   const audio = $('mode').value==='audio';
   const q = $('quality').value;
-  return { audio, maxHeight: audio||q==='best' ? null : parseInt(q,10), cat: $('cat').value };
+  const aq = $('aquality').value;
+  return {
+    audio,
+    maxHeight: audio||q==='best' ? null : parseInt(q,10),
+    cat: $('cat').value,
+    container: audio ? 'mp4' : $('fmt').value,
+    audioFmt: audio ? $('fmt').value : 'mp3',
+    audioQuality: audio && aq!=='' ? parseInt(aq,10) : null,
+    subs: !audio && $('subs').checked,
+    subLangs: $('sublangs').value,
+  };
 }
 
 async function startDownload(url, title){
   const o = curOpts();
   const row={ id:uid++, title:title||'(ยังไม่ตั้งชื่อ)', cat:o.cat, kind:o.audio?'audio':'video',
     res: o.audio?'audio':(o.maxHeight?o.maxHeight+'p':'—'), size:'—', state:'dl', pct:0,
-    url, audio:o.audio, maxHeight:o.maxHeight, thumb:null };
+    url, audio:o.audio, maxHeight:o.maxHeight, thumb:null,
+    fmt:o.audio?o.audioFmt:o.container, subs:o.subs };
   rows.unshift(row); render();
 
   if(!inTauri) return demo(row);
@@ -244,7 +281,8 @@ async function startDownload(url, title){
   invoke('probe_meta',{url}).then(m=>{ if(m){ if(row.title==='(ยังไม่ตั้งชื่อ)'&&m.title){row.title=m.title;} row.thumb=m.thumbnail; render(); } }).catch(()=>{});
 
   try{
-    const res=await invoke('download_video',{ id:row.id, url, title, category:o.cat, audio:o.audio, maxHeight:o.maxHeight });
+    const res=await invoke('download_video',{ id:row.id, url, title, category:o.cat, audio:o.audio, maxHeight:o.maxHeight,
+      container:o.container, audioFmt:o.audioFmt, audioQuality:o.audioQuality, subs:o.subs, subLangs:o.subLangs });
     row.state='done';
     row.res = res.height && res.height!=='?' ? res.height+'p' : (o.audio?'audio':'—');
     row.size=res.size; row.path=res.path;
@@ -298,7 +336,10 @@ async function cancel(id){ const r=rows.find(x=>x.id===id); if(!r)return;
 async function reveal(id){ const r=rows.find(x=>x.id===id); if(r?.path && inTauri){ try{ await invoke('reveal',{path:r.path}); }catch(e){ setStat('เปิดโฟลเดอร์ไม่ได้: '+e); } } }
 function retry(id){ const r=rows.find(x=>x.id===id); if(!r)return;
   $('mode').value=r.kind==='audio'?'audio':'video';
+  syncMode();
+  if(r.fmt && [...$('fmt').options].some(o=>o.value===r.fmt)) $('fmt').value=r.fmt;
   $('quality').value=r.maxHeight?String(r.maxHeight):'best';
+  if(typeof r.subs==='boolean') $('subs').checked=r.subs;
   if([...$('cat').options].some(o=>o.value===r.cat)) $('cat').value=r.cat;
   rows=rows.filter(x=>x.id!==id); startDownload(r.url, r.title==='(ยังไม่ตั้งชื่อ)'?'':r.title); }
 
@@ -355,7 +396,20 @@ async function init(){
   smart = localStorage.getItem(LS.smart)!=='0'; applySmart();
   loadRows(); render();
 
-  ['mode','quality','cat'].forEach(k=>{ const el=$(k); el.addEventListener('change',()=>localStorage.setItem(LS[k], el.value)); });
+  // restore ค่า control (ทำงานทั้ง demo + tauri); fmt restore อยู่ใน syncMode
+  const sm=localStorage.getItem(LS.mode); if(sm) $('mode').value=sm;
+  const sq=localStorage.getItem(LS.quality); if(sq) $('quality').value=sq;
+  const saq=localStorage.getItem(LS.aquality); if(saq!==null) $('aquality').value=saq;
+  if(localStorage.getItem(LS.subs)==='1') $('subs').checked=true;
+  const sl=localStorage.getItem(LS.sublangs); if(sl) $('sublangs').value=sl;
+  syncMode();
+
+  $('mode').addEventListener('change',()=>{ localStorage.setItem(LS.mode,$('mode').value); syncMode(); });
+  ['quality','cat'].forEach(k=>{ const el=$(k); el.addEventListener('change',()=>localStorage.setItem(LS[k], el.value)); });
+  $('fmt').addEventListener('change',()=>localStorage.setItem($('mode').value==='audio'?LS.afmt:LS.vfmt, $('fmt').value));
+  $('aquality').addEventListener('change',()=>localStorage.setItem(LS.aquality,$('aquality').value));
+  $('subs').addEventListener('change',()=>localStorage.setItem(LS.subs,$('subs').checked?'1':'0'));
+  $('sublangs').addEventListener('change',()=>localStorage.setItem(LS.sublangs,$('sublangs').value));
 
   $('tabs').querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
     activeTab=b.dataset.tab;
@@ -381,8 +435,6 @@ async function init(){
     const sel=$('cat'); sel.innerHTML='';
     (cats.length?cats:['ยังไม่จัดหมวด']).forEach(c=>{ const o=document.createElement('option'); o.textContent=c; sel.appendChild(o); });
     const savedCat=localStorage.getItem(LS.cat); if(savedCat && [...sel.options].some(o=>o.value===savedCat)) sel.value=savedCat;
-    const sm=localStorage.getItem(LS.mode); if(sm) $('mode').value=sm;
-    const sq=localStorage.getItem(LS.quality); if(sq) $('quality').value=sq;
   }catch(e){ console.error(e); }
 
   listen('vdo://progress', e=>{ const r=rows.find(x=>x.id===e.payload.id); if(r && r.state==='dl' && e.payload.pct>=0){ r.pct=e.payload.pct; render(); } });

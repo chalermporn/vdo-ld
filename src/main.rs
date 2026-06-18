@@ -10,7 +10,7 @@ use std::process::Command;
 use std::sync::atomic::AtomicBool;
 use vdo_dl::{
     download, ensure_tools, file_into, human_size, update, vdo_root, verify, ytdlp_path,
-    DownloadOpts, VResult,
+    AudioFmt, Container, DownloadOpts, VResult,
 };
 
 fn color_on() -> bool {
@@ -43,8 +43,12 @@ Usage:
   vdo-dl update          อัปเดต yt-dlp (+ ffmpeg บน Windows) ที่ bundle ไว้
 
 Options:
-  --audio          โหลดเสียงอย่างเดียว (mp3)
-  --quality N      จำกัดความสูงสูงสุด เช่น 1080, 720 (ไม่ใส่ = สูงสุด)
+  --audio              โหลดเสียงอย่างเดียว
+  --quality N          จำกัดความสูงสูงสุด เช่น 1080, 720 (ไม่ใส่ = สูงสุด)
+  --mkv                วิดีโอ: merge เป็น .mkv (default .mp4)
+  --audio-format FMT   เสียง: mp3 | m4a | ogg (default mp3)
+  --audio-quality N    เสียง: 0(ดีสุด)..10 (ไม่ใส่ = ค่า default)
+  --subs[=LANGS]       วิดีโอ: ดาวน์โหลด+ฝังคำบรรยาย (ไม่ระบุ = en,th)
 
 ครั้งแรกที่รัน ถ้าเครื่องไม่มี yt-dlp/ffmpeg จะโหลดมาเก็บเองที่ <data>/vdo-dl/bin/.
 Env: VDO_ROOT, VDO_BIN, NO_COLOR";
@@ -87,6 +91,23 @@ fn run() -> VResult<()> {
             "--audio" => opts.audio = true,
             "--quality" => opts.max_height = it.next().and_then(|q| parse_quality(q)),
             s if s.starts_with("--quality=") => opts.max_height = parse_quality(&s[10..]),
+            "--mkv" => opts.container = Container::Mkv,
+            "--audio-format" => {
+                if let Some(f) = it.next() {
+                    opts.audio_fmt = AudioFmt::parse(f);
+                }
+            }
+            s if s.starts_with("--audio-format=") => opts.audio_fmt = AudioFmt::parse(&s[15..]),
+            "--audio-quality" => opts.audio_quality = it.next().and_then(|q| q.trim().parse().ok()),
+            s if s.starts_with("--audio-quality=") => opts.audio_quality = s[16..].trim().parse().ok(),
+            "--subs" => {
+                opts.subs = true;
+                opts.sub_langs = "en,th".into();
+            }
+            s if s.starts_with("--subs=") => {
+                opts.subs = true;
+                opts.sub_langs = s[7..].to_string();
+            }
             s => pos.push(s),
         }
     }
@@ -96,11 +117,15 @@ fn run() -> VResult<()> {
     let category = pos.get(2).copied().unwrap_or("");
 
     let tools = ensure_tools(&|m| info(m))?;
-    info(if opts.audio {
-        "กำลังโหลดเสียง (mp3) ..."
+    if opts.audio {
+        info(&format!("กำลังโหลดเสียง ({}) ...", opts.audio_fmt.as_str()));
     } else {
-        "กำลังโหลดคุณภาพสูงสุด (bv*+ba → merge mp4, ไม่ re-encode) ..."
-    });
+        info(&format!(
+            "กำลังโหลดคุณภาพสูงสุด (bv*+ba → merge {}, ไม่ re-encode){} ...",
+            opts.container.as_str(),
+            if opts.subs { " + ซับ" } else { "" }
+        ));
+    }
 
     let cancel = AtomicBool::new(false);
     let file = download(&tools, url, &vdo_root().join("tmp"), &opts, &cancel, &|pct, line| {

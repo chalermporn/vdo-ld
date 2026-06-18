@@ -15,11 +15,100 @@ use std::time::Duration;
 
 pub type VResult<T> = Result<T, String>;
 
-/// ตัวเลือกการโหลด: เสียงอย่างเดียวไหม + จำกัดความสูงสูงสุด (None = สูงสุด)
-#[derive(Clone, Copy, Default)]
+/// container ของไฟล์วิดีโอที่ merge ออกมา
+#[derive(Clone, Copy, Default, PartialEq, Debug)]
+pub enum Container {
+    #[default]
+    Mp4,
+    Mkv,
+}
+impl Container {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Container::Mp4 => "mp4",
+            Container::Mkv => "mkv",
+        }
+    }
+    /// parse จาก string ที่ frontend ส่งมา (ไม่รู้จัก = default mp4)
+    pub fn parse(s: &str) -> Container {
+        match s.trim().to_lowercase().as_str() {
+            "mkv" => Container::Mkv,
+            _ => Container::Mp4,
+        }
+    }
+}
+
+/// รูปแบบไฟล์เสียงตอน extract
+#[derive(Clone, Copy, Default, PartialEq, Debug)]
+pub enum AudioFmt {
+    #[default]
+    Mp3,
+    M4a,
+    Ogg,
+}
+impl AudioFmt {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            AudioFmt::Mp3 => "mp3",
+            AudioFmt::M4a => "m4a",
+            AudioFmt::Ogg => "ogg",
+        }
+    }
+    /// parse จาก string ที่ frontend ส่งมา (ไม่รู้จัก = default mp3)
+    pub fn parse(s: &str) -> AudioFmt {
+        match s.trim().to_lowercase().as_str() {
+            "m4a" => AudioFmt::M4a,
+            "ogg" => AudioFmt::Ogg,
+            _ => AudioFmt::Mp3,
+        }
+    }
+}
+
+/// ตัวเลือกการโหลด. หมายเหตุ: ไม่ derive Copy แล้ว เพราะมี sub_langs:String
+#[derive(Clone, Default)]
 pub struct DownloadOpts {
     pub audio: bool,
-    pub max_height: Option<u32>,
+    pub max_height: Option<u32>,    // จำกัดความสูง (None = สูงสุด)
+    pub container: Container,       // วิดีโอ: --merge-output-format
+    pub audio_fmt: AudioFmt,        // เสียง: --audio-format
+    pub audio_quality: Option<u8>,  // --audio-quality 0(best)..10 (None = ค่า default ของ yt-dlp)
+    pub subs: bool,                 // ดาวน์โหลด+ฝังคำบรรยาย (เฉพาะวิดีโอ)
+    pub sub_langs: String,          // ภาษาซับ เช่น "en,th" หรือ "all" (ว่าง = ข้าม แม้ subs=true)
+}
+
+/// สร้าง args ของ yt-dlp สำหรับ format + subtitle (แยกเป็นฟังก์ชันบริสุทธิ์เพื่อ unit-test)
+pub fn build_format_args(opts: &DownloadOpts) -> Vec<String> {
+    let mut a: Vec<String> = Vec::new();
+    if opts.audio {
+        a.push("-x".into());
+        a.push("--audio-format".into());
+        a.push(opts.audio_fmt.as_str().into());
+        if let Some(q) = opts.audio_quality {
+            a.push("--audio-quality".into());
+            a.push(q.to_string());
+        }
+        return a; // เสียงไม่มี container/subtitle
+    }
+
+    let fmt = match opts.max_height {
+        Some(h) => format!("bv*[height<={h}]+ba/b[height<={h}]"),
+        None => "bv*+ba/b".to_string(),
+    };
+    a.push("-f".into());
+    a.push(fmt);
+    a.push("--merge-output-format".into());
+    a.push(opts.container.as_str().into());
+
+    if opts.subs && !opts.sub_langs.trim().is_empty() {
+        a.push("--write-subs".into());
+        a.push("--write-auto-subs".into());
+        a.push("--sub-langs".into());
+        a.push(opts.sub_langs.trim().into());
+        a.push("--embed-subs".into());
+        a.push("--convert-subs".into());
+        a.push("srt".into());
+    }
+    a
 }
 
 /// callback รับข้อความสถานะ (เช่น "โหลด yt-dlp ครั้งแรก…")
@@ -367,21 +456,16 @@ pub fn download(
     let out_template = tmp.join("%(title,id).150B.%(ext)s");
 
     let mut cmd = Command::new(&tools.yt_dlp);
+    // --progress: บังคับให้พ่น progress แม้ถูก pipe (ไม่ใช่ TTY) ไม่งั้น yt-dlp เงียบ
+    // หมายเหตุ: progress-template ออกที่ "stdout" (ปนกับ --print path) ไม่ใช่ stderr
     cmd.arg("--newline")
+        .arg("--progress")
         .args(["--progress-template", "PROG:%(progress._percent_str)s"])
         .arg("-o")
         .arg(&out_template)
         .args(["--print", "after_move:filepath"]);
 
-    if opts.audio {
-        cmd.args(["-x", "--audio-format", "mp3"]);
-    } else {
-        let fmt = match opts.max_height {
-            Some(h) => format!("bv*[height<={h}]+ba/b[height<={h}]"),
-            None => "bv*+ba/b".to_string(),
-        };
-        cmd.args(["-f", &fmt, "--merge-output-format", "mp4"]);
-    }
+    cmd.args(build_format_args(opts));
     ffmpeg_location_arg(&mut cmd, &tools.ffmpeg);
 
     let mut child = cmd
@@ -408,22 +492,22 @@ pub fn download(
                 std::thread::sleep(Duration::from_millis(150));
             }
         });
-        // stderr: progress + สถานะ
+        // stderr: ข้อความสถานะ/คำเตือนอย่างเดียว (progress ไม่ได้มาทางนี้)
         s.spawn(|| {
             for line in BufReader::new(stderr).lines().map_while(Result::ok) {
                 let t = line.trim();
-                if let Some(p) = t.strip_prefix("PROG:") {
-                    let pct = p.trim().trim_end_matches('%').trim().parse::<f32>().unwrap_or(-1.0);
-                    on(pct, t);
-                } else if !t.is_empty() {
+                if !t.is_empty() {
                     on(-1.0, t);
                 }
             }
         });
-        // stdout: path ของไฟล์ผลลัพธ์ (บรรทัด non-empty สุดท้าย)
+        // stdout: progress (PROG:NN%) ปนกับ path ของไฟล์ผลลัพธ์ (บรรทัด non-PROG สุดท้าย)
         for line in BufReader::new(stdout).lines().map_while(Result::ok) {
             let t = line.trim();
-            if !t.is_empty() {
+            if let Some(p) = t.strip_prefix("PROG:") {
+                let pct = p.trim().trim_end_matches('%').trim().parse::<f32>().unwrap_or(-1.0);
+                on(pct, t);
+            } else if !t.is_empty() {
                 last_path = t.to_string();
             }
         }
@@ -620,5 +704,86 @@ pub fn read_clipboard() -> String {
         try_cmd("wl-paste", &[])
             .or_else(|| try_cmd("xclip", &["-selection", "clipboard", "-o"]))
             .unwrap_or_default()
+    }
+}
+
+// ---------- tests ----------
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn has_pair(args: &[String], key: &str, val: &str) -> bool {
+        args.windows(2).any(|w| w[0] == key && w[1] == val)
+    }
+
+    #[test]
+    fn video_default_is_best_mp4() {
+        let a = build_format_args(&DownloadOpts::default());
+        assert!(has_pair(&a, "-f", "bv*+ba/b"));
+        assert!(has_pair(&a, "--merge-output-format", "mp4"));
+        assert!(!a.iter().any(|s| s == "-x"));
+    }
+
+    #[test]
+    fn video_mkv_with_quality_cap() {
+        let a = build_format_args(&DownloadOpts {
+            max_height: Some(720),
+            container: Container::Mkv,
+            ..Default::default()
+        });
+        assert!(has_pair(&a, "-f", "bv*[height<=720]+ba/b[height<=720]"));
+        assert!(has_pair(&a, "--merge-output-format", "mkv"));
+    }
+
+    #[test]
+    fn audio_m4a_with_quality() {
+        let a = build_format_args(&DownloadOpts {
+            audio: true,
+            audio_fmt: AudioFmt::M4a,
+            audio_quality: Some(0),
+            ..Default::default()
+        });
+        assert!(a.iter().any(|s| s == "-x"));
+        assert!(has_pair(&a, "--audio-format", "m4a"));
+        assert!(has_pair(&a, "--audio-quality", "0"));
+        // เสียงต้องไม่มี container/subtitle
+        assert!(!a.iter().any(|s| s == "--merge-output-format"));
+        assert!(!a.iter().any(|s| s == "--embed-subs"));
+    }
+
+    #[test]
+    fn subs_only_on_video_and_when_langs_present() {
+        let with = build_format_args(&DownloadOpts {
+            subs: true,
+            sub_langs: "en,th".into(),
+            ..Default::default()
+        });
+        assert!(has_pair(&with, "--sub-langs", "en,th"));
+        assert!(with.iter().any(|s| s == "--embed-subs"));
+
+        // subs=true แต่ภาษาว่าง → ข้าม
+        let empty = build_format_args(&DownloadOpts {
+            subs: true,
+            sub_langs: "  ".into(),
+            ..Default::default()
+        });
+        assert!(!empty.iter().any(|s| s == "--embed-subs"));
+
+        // โหมดเสียงไม่ฝังซับแม้ subs=true
+        let audio = build_format_args(&DownloadOpts {
+            audio: true,
+            subs: true,
+            sub_langs: "en".into(),
+            ..Default::default()
+        });
+        assert!(!audio.iter().any(|s| s == "--embed-subs"));
+    }
+
+    #[test]
+    fn parse_helpers_fall_back_to_default() {
+        assert_eq!(Container::parse("mkv"), Container::Mkv);
+        assert_eq!(Container::parse("webm"), Container::Mp4);
+        assert_eq!(AudioFmt::parse("OGG"), AudioFmt::Ogg);
+        assert_eq!(AudioFmt::parse("flac"), AudioFmt::Mp3);
     }
 }
