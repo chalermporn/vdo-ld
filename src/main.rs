@@ -9,9 +9,9 @@ use std::env;
 use std::process::Command;
 use std::sync::atomic::AtomicBool;
 use vdo_dl::{
-    download, ensure_tools, file_into, file_into_dir, human_size, probe_playlist, update,
-    vdo_root, verify, write_m3u, ytdlp_path, AudioFmt, Container, Cookies, DlEvent, DownloadOpts,
-    VResult,
+    backfill_index, download, ensure_tools, file_into, file_into_dir, human_size, index_record,
+    prepend_tool_path, probe_playlist, search_index, update, vdo_root, verify, write_m3u,
+    ytdlp_path, AudioFmt, Container, Cookies, DlEvent, DownloadOpts, VResult,
 };
 
 fn color_on() -> bool {
@@ -42,6 +42,8 @@ Usage:
   vdo-dl [--audio] [--quality N] <URL> [\"ชื่อเรื่อง\"] [\"หมวด\"]
   vdo-dl -F <URL>        ดูตาราง format ที่มี (ไม่โหลด)
   vdo-dl update          อัปเดต yt-dlp (+ ffmpeg บน Windows) ที่ bundle ไว้
+  vdo-dl search [คำค้น]  ค้นประวัติที่เคยโหลด (title/ผู้ลง/หมวด/URL/แหล่ง); ไม่ใส่คำ = ล่าสุด
+  vdo-dl backfill        สแกนไฟล์ใน ~/VDO/ ที่ยังไม่อยู่ใน index แล้วเพิ่มเข้า (ของเก่าไม่มี URL)
 
 Options:
   --audio              โหลดเสียงอย่างเดียว
@@ -51,6 +53,7 @@ Options:
   --audio-quality N    เสียง: 0(ดีสุด)..10 (ไม่ใส่ = ค่า default)
   --subs[=LANGS]       วิดีโอ: ดาวน์โหลด+ฝังคำบรรยาย (ไม่ระบุ = en,th)
   --playlist           โหลดทั้ง playlist → ~/VDO/<หมวด>/<ชื่อ/playlist>/ + .m3u
+  --wait-for-video[=N] รอไลฟ์/พรีเมียร์ที่ตั้งเวลาให้เริ่มก่อน (poll ทุก N วิ, default 60)
   --cookies-from-browser B   ใช้คุกกี้จากเบราว์เซอร์ (chrome|safari|firefox|edge|brave|…)
                              สำหรับเนื้อหาที่ต้องล็อกอิน (เช่น คอร์สที่ enroll, ไม่มี DRM)
   --cookies FILE             ใช้คุกกี้จากไฟล์ cookies.txt (Netscape)
@@ -74,10 +77,23 @@ fn run() -> VResult<()> {
             return Ok(());
         }
         Some("update") => return update(&|m| info(m)),
+        Some("search") => {
+            let q = args.get(1).map(|s| s.as_str()).unwrap_or("");
+            print!("{}", search_index(q)?);
+            return Ok(());
+        }
+        Some("backfill") => {
+            let tools = ensure_tools(&|m| info(m))?;
+            let n = backfill_index(&tools.ffprobe, &|m| info(m))?;
+            ok(&format!("เพิ่มเข้า index {} รายการ", n));
+            return Ok(());
+        }
         Some("-F") => {
             let url = args.get(1).ok_or("ใส่ URL ด้วย: vdo-dl -F <URL>")?;
             let yt = ytdlp_path(&|m| info(m))?;
-            let status = Command::new(&yt)
+            let mut cmd = Command::new(&yt);
+            prepend_tool_path(&mut cmd);
+            let status = cmd
                 .arg("-F")
                 .arg(url)
                 .status()
@@ -114,6 +130,11 @@ fn run() -> VResult<()> {
                 opts.sub_langs = s[7..].to_string();
             }
             "--playlist" => opts.playlist = true,
+            // รอไลฟ์/พรีเมียร์ที่ตั้งเวลา: bare = poll ทุก 60 วิ, =N = ทุก N วิ
+            "--wait-for-video" => opts.wait_for_video = Some(60),
+            s if s.starts_with("--wait-for-video=") => {
+                opts.wait_for_video = s[17..].trim().parse().ok().or(Some(60));
+            }
             "--cookies-from-browser" => {
                 if let Some(b) = it.next() {
                     opts.cookies = Cookies::Browser(b.clone());
@@ -157,7 +178,7 @@ fn run() -> VResult<()> {
         },
         DlEvent::Progress { .. } => {}
         DlEvent::Status { line, .. } => eprintln!("{}", line),
-        DlEvent::ItemDone { index: Some(i), path } => {
+        DlEvent::ItemDone { index: Some(i), path, .. } => {
             eprintln!();
             ok(&format!("#{} เสร็จ: {}", i, path.display()));
         }
@@ -174,8 +195,17 @@ fn run() -> VResult<()> {
             probe_playlist(url, &opts.cookies).map(|(t, _)| t).unwrap_or_else(|_| "playlist".into())
         };
         let mut dests = vec![];
-        for (_idx, src) in &items {
-            dests.push(file_into_dir(src, category, &subfolder)?);
+        for it in &items {
+            let dest = file_into_dir(&it.path, category, &subfolder)?;
+            // index แต่ละ item — title มาจาก yt-dlp (fallback ชื่อไฟล์), source = URL ทั้งชุด
+            let v = verify(&tools.ffprobe, &dest);
+            let item_title = if !it.meta.title.is_empty() {
+                it.meta.title.clone()
+            } else {
+                dest.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default()
+            };
+            let _ = index_record(url, it.index, &it.meta, &item_title, category, &dest, &v);
+            dests.push(dest);
         }
         let dir = dests[0].parent().unwrap_or(&dests[0]).to_path_buf();
         ok(&format!("playlist {} ไฟล์ → {}", dests.len(), dir.display()));
@@ -189,7 +219,8 @@ fn run() -> VResult<()> {
     }
 
     // วิดีโอเดี่ยว
-    let (_idx, file) = &items[0];
+    let it = &items[0];
+    let file = &it.path;
     let v = verify(&tools.ffprobe, file);
     ok(&format!(
         "ได้ไฟล์: {}x{} {}/{}  ({})",
@@ -204,6 +235,7 @@ fn run() -> VResult<()> {
 
     let dest = file_into(file, category, title)?;
     ok(&format!("ย้ายเข้า: {}", dest.display()));
+    let _ = index_record(url, it.index, &it.meta, title, category, &dest, &v);
     println!("{}", dest.display());
     Ok(())
 }

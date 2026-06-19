@@ -7,11 +7,11 @@
 
 use std::env;
 use std::fs;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub type VResult<T> = Result<T, String>;
 
@@ -105,6 +105,16 @@ pub struct DownloadOpts {
     pub sub_langs: String,          // ภาษาซับ เช่น "en,th" หรือ "all" (ว่าง = ข้าม แม้ subs=true)
     pub playlist: bool,             // true = โหลดทั้ง playlist (default false = คลิปเดียว)
     pub cookies: Cookies,           // คุกกี้สำหรับเนื้อหาที่ต้องล็อกอิน
+    pub wait_for_video: Option<u32>, // รอไลฟ์/พรีเมียร์ที่ตั้งเวลา: ช่วงเวลา poll (วินาที); None = ไม่รอ
+}
+
+/// args ของ yt-dlp สำหรับรอไลฟ์/พรีเมียร์ที่ตั้งเวลาไว้ (None = ไม่รอ).
+/// ค่า = ช่วง retry เป็นวินาที (ส่งเป็น MIN ของ --wait-for-video MIN[-MAX]).
+pub fn wait_for_video_args(secs: Option<u32>) -> Vec<String> {
+    match secs {
+        Some(s) => vec!["--wait-for-video".into(), s.to_string()],
+        None => vec![],
+    }
 }
 
 /// สร้าง args ของ yt-dlp สำหรับ format + subtitle (แยกเป็นฟังก์ชันบริสุทธิ์เพื่อ unit-test)
@@ -152,8 +162,29 @@ pub enum DlEvent<'a> {
     Progress { index: Option<u32>, pct: f32 },
     /// ข้อความสถานะ/คำเตือนดิบจาก yt-dlp
     Status { index: Option<u32>, line: &'a str },
-    /// item หนึ่งโหลด+ย้ายเสร็จแล้ว (path ใน tmp)
-    ItemDone { index: Option<u32>, path: PathBuf },
+    /// item หนึ่งโหลด+ย้ายเสร็จแล้ว (path ใน tmp) + provenance ต้นทาง
+    ItemDone { index: Option<u32>, path: PathBuf, meta: ItemMeta },
+}
+
+/// metadata ต้นทาง (provenance) ที่ yt-dlp พ่นมาตอน item เสร็จ — เก็บลง index DB เพื่อค้นย้อนหลัง.
+/// field ว่าง = yt-dlp ไม่มีค่านั้น (เช่นบางเว็บไม่มี uploader/upload_date)
+#[derive(Clone, Debug, Default)]
+pub struct ItemMeta {
+    pub video_id: String,
+    pub title: String,
+    pub webpage_url: String,
+    pub uploader: String,
+    pub upload_date: String,
+    pub duration: String,
+    pub extractor: String,
+}
+
+/// item ที่โหลด+ย้ายลง tmp สำเร็จ — path ใน tmp + provenance (ใช้ต่อในชั้น caller: file_into แล้ว index)
+#[derive(Clone, Debug)]
+pub struct DownloadedItem {
+    pub index: Option<u32>,
+    pub path: PathBuf,
+    pub meta: ItemMeta,
 }
 /// callback รับ DlEvent ระหว่างโหลด (เรียกจากหลาย thread ได้ → ต้อง Sync)
 pub type OnEvent<'a> = dyn Fn(DlEvent) + Sync + 'a;
@@ -305,6 +336,20 @@ pub fn find_tool(name: &str, version_arg: &str) -> Option<PathBuf> {
         }
     }
     None
+}
+
+/// เพิ่ม extra_tool_dirs เข้าหัว PATH ของ child process. สำคัญสำหรับ yt-dlp: มันต้องหา
+/// JS runtime (deno) ใน PATH ของตัวเองเพื่อแก้ JS challenge ของ YouTube. GUI app ที่เปิด
+/// จาก Finder ได้ PATH แคบ (ไม่มี /opt/homebrew/bin) → หา deno ไม่เจอ → ได้ format ไม่ครบ
+/// → "Requested format is not available". เพิ่ม PATH ให้ครอบ Homebrew ฯลฯ จึงแก้ได้.
+pub fn prepend_tool_path(cmd: &mut Command) {
+    let cur = env::var_os("PATH").unwrap_or_default();
+    let extra = extra_tool_dirs().iter().map(PathBuf::from);
+    let mut dirs: Vec<PathBuf> = extra.collect();
+    dirs.extend(env::split_paths(&cur));
+    if let Ok(joined) = env::join_paths(dirs) {
+        cmd.env("PATH", joined);
+    }
 }
 
 // ---------- download helpers (curl + tar) ----------
@@ -515,6 +560,14 @@ fn parse_idx(s: &str) -> Option<u32> {
     }
 }
 
+/// แปลง field จาก yt-dlp --print เป็น String — "NA"/ว่าง = ไม่มีค่า → ""
+fn na(s: Option<&str>) -> String {
+    match s.map(str::trim) {
+        Some(v) if !v.is_empty() && v != "NA" => v.to_string(),
+        _ => String::new(),
+    }
+}
+
 /// โหลดตาม opts. คืน Vec ของ (playlist_index, path ใน tmp) ตามลำดับที่โหลดเสร็จ
 /// (วิดีโอเดี่ยว = 1 รายการ index=None; playlist = หลายรายการ). ส่ง DlEvent ระหว่างทาง.
 ///
@@ -529,7 +582,7 @@ pub fn download(
     opts: &DownloadOpts,
     cancel: &AtomicBool,
     on: &OnEvent,
-) -> VResult<Vec<(Option<u32>, PathBuf)>> {
+) -> VResult<Vec<DownloadedItem>> {
     fs::create_dir_all(tmp).map_err(|e| format!("สร้าง tmp ไม่ได้: {}", e))?;
     // playlist: ใส่เลขลำดับนำหน้าชื่อไฟล์; เดี่ยว: ใช้ชื่อวิดีโอจริง (fallback id)
     let out_template = if opts.playlist {
@@ -539,6 +592,7 @@ pub fn download(
     };
 
     let mut cmd = Command::new(&tools.yt_dlp);
+    prepend_tool_path(&mut cmd); // ให้ yt-dlp หา deno (JS runtime) เจอแม้ PATH แคบจาก GUI
     // --progress: บังคับให้พ่น progress แม้ถูก pipe (ไม่ใช่ TTY) ไม่งั้น yt-dlp เงียบ
     // หมายเหตุ: progress-template + --print ออกที่ "stdout" (ไม่ใช่ stderr)
     cmd.arg("--newline")
@@ -549,7 +603,12 @@ pub fn download(
         ])
         .arg("-o")
         .arg(&out_template)
-        .args(["--print", "after_move:DONE:::%(playlist_index)s:::%(filepath)s"]);
+        // DONE line พก provenance ติดมาด้วย (ดึงฟรีตอน item เสร็จ ไม่ต้องเรียก yt-dlp ซ้ำ);
+        // filepath อยู่ท้ายสุดกัน ::: ในชื่อ path ทำ parser เพี้ยน (path ไม่มี ::: อยู่แล้ว)
+        .args([
+            "--print",
+            "after_move:DONE:::%(playlist_index)s:::%(id)s:::%(title)s:::%(webpage_url)s:::%(uploader)s:::%(upload_date)s:::%(duration)s:::%(extractor)s:::%(filepath)s",
+        ]);
 
     if opts.playlist {
         // -i: item ที่พัง (เช่น DRM ใน Phase 3) ให้ข้าม ไม่ล้มทั้ง playlist
@@ -560,6 +619,7 @@ pub fn download(
 
     cmd.args(build_format_args(opts));
     cmd.args(cookie_args(&opts.cookies));
+    cmd.args(wait_for_video_args(opts.wait_for_video));
     ffmpeg_location_arg(&mut cmd, &tools.ffmpeg);
 
     let mut child = cmd
@@ -572,7 +632,7 @@ pub fn download(
     let pid = child.id();
     let stderr = child.stderr.take().unwrap();
     let stdout = child.stdout.take().unwrap();
-    let mut items: Vec<(Option<u32>, PathBuf)> = Vec::new();
+    let mut items: Vec<DownloadedItem> = Vec::new();
     let done = AtomicBool::new(false);
     // เก็บบรรทัด ERROR ล่าสุดไว้แปลงเป็นข้อความที่อ่านง่ายตอนล้มเหลว
     let last_err = std::sync::Mutex::new(String::new());
@@ -617,15 +677,25 @@ pub fn download(
                 let index = parse_idx(f.next().unwrap_or(""));
                 on(DlEvent::Progress { index, pct });
             } else if let Some(rest) = t.strip_prefix("DONE:::") {
-                let mut f = rest.splitn(2, ":::");
+                let mut f = rest.splitn(9, ":::");
                 let index = parse_idx(f.next().unwrap_or(""));
+                let meta = ItemMeta {
+                    video_id: na(f.next()),
+                    title: na(f.next()),
+                    webpage_url: na(f.next()),
+                    uploader: na(f.next()),
+                    upload_date: na(f.next()),
+                    duration: na(f.next()),
+                    extractor: na(f.next()),
+                };
                 let path = PathBuf::from(f.next().unwrap_or("").trim());
                 if path.is_file() {
                     on(DlEvent::ItemDone {
                         index,
                         path: path.clone(),
+                        meta: meta.clone(),
                     });
-                    items.push((index, path));
+                    items.push(DownloadedItem { index, path, meta });
                 }
             }
         }
@@ -665,11 +735,246 @@ pub fn friendly_error(raw: &str) -> String {
         || low.contains("registered users")
     {
         "ต้องล็อกอิน — ลองตั้งคุกกี้ในเมนูตั้งค่า (บัญชี/คุกกี้)".into()
+    } else if low.contains("live event will begin")
+        || low.contains("premiere will begin")
+        || low.contains("premieres in")
+        || low.contains("will begin in")
+        || low.contains("this live event")
+    {
+        "ไลฟ์/พรีเมียร์ยังไม่เริ่ม — รอจนถ่ายทอดสดเริ่มแล้วค่อยโหลดอีกครั้ง".into()
+    } else if low.contains("live stream recording is not available")
+        || low.contains("this live stream recording")
+    {
+        "ไลฟ์จบแล้วแต่ยังไม่มีไฟล์ย้อนหลัง — รอ YouTube ประมวลผลวิดีโอก่อน แล้วค่อยลองใหม่".into()
+    } else if low.contains("requested format is not available") {
+        "ไม่พบรูปแบบที่ขอ — YouTube ต้องใช้ JS runtime (deno) สกัดวิดีโอ; ติดตั้งด้วย `brew install deno` แล้วลองใหม่".into()
     } else if !raw.trim().is_empty() {
         format!("yt-dlp: {}", raw.trim_start_matches("ERROR:").trim())
     } else {
         "yt-dlp โหลดไม่สำเร็จ".into()
     }
+}
+
+// ---------- index (provenance DB ผ่าน sqlite3 CLI — คง zero Rust dep ของ core) ----------
+//
+// เก็บ source URL + metadata ทุกครั้งที่โหลด ลง DB กลางที่ <vdo_root>/.vdo-dl/index.db
+// เพื่อค้นย้อนหลังได้ (ดู subcommand `search`/`backfill` ใน CLI). shell out ไป sqlite3
+// ที่มากับ OS เหมือนวิธีเรียก yt-dlp/ffmpeg — ไม่ดึง Rust crate เข้ามา.
+// best-effort: เครื่องไม่มี sqlite3 → ข้ามเงียบ ไม่ให้การโหลดพัง.
+
+const SCHEMA: &str = "CREATE TABLE IF NOT EXISTS downloads (\
+    id INTEGER PRIMARY KEY AUTOINCREMENT, \
+    source_url TEXT NOT NULL, video_id TEXT, webpage_url TEXT, \
+    title TEXT, category TEXT, dest_path TEXT UNIQUE, ext TEXT, \
+    width TEXT, height TEXT, vcodec TEXT, acodec TEXT, size_bytes INTEGER, \
+    uploader TEXT, upload_date TEXT, duration TEXT, extractor TEXT, \
+    playlist_index INTEGER, downloaded_at INTEGER);";
+
+/// path ของ DB กลาง: <vdo_root>/.vdo-dl/index.db
+pub fn index_db_path() -> PathBuf {
+    vdo_root().join(".vdo-dl").join("index.db")
+}
+
+/// หา sqlite3 (managed bin → PATH). None = เครื่องไม่มี → caller ข้าม indexing แบบเงียบ
+pub fn sqlite3_path() -> Option<PathBuf> {
+    find_tool("sqlite3", "-version")
+}
+
+/// escape เป็น SQL string literal ของ sqlite (double single-quote) — กัน injection จากชื่อไฟล์/ชื่อเรื่อง
+fn sql_quote(s: &str) -> String {
+    format!("'{}'", s.replace('\'', "''"))
+}
+
+fn now_epoch() -> i64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
+}
+
+/// รัน SQL ผ่าน stdin ของ sqlite3 — คืน stdout. สร้างโฟลเดอร์ DB ให้ถ้ายังไม่มี
+fn run_sql(db: &Path, sql: &str) -> VResult<String> {
+    let sqlite = sqlite3_path().ok_or("ไม่มี sqlite3 บนเครื่องนี้")?;
+    if let Some(parent) = db.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("สร้างโฟลเดอร์ index ไม่ได้: {}", e))?;
+    }
+    let mut child = Command::new(sqlite)
+        .arg(db)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("รัน sqlite3 ไม่ได้: {}", e))?;
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(sql.as_bytes())
+        .map_err(|e| format!("เขียน SQL ไม่ได้: {}", e))?;
+    let out = child.wait_with_output().map_err(|e| format!("sqlite3 พัง: {}", e))?;
+    if !out.status.success() {
+        return Err(format!("sqlite3: {}", String::from_utf8_lossy(&out.stderr).trim()));
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+/// แกนกลางของ index_record — ระบุ downloaded_at เองได้ (backfill ใช้ mtime ของไฟล์)
+#[allow(clippy::too_many_arguments)]
+fn index_record_at(
+    source_url: &str,
+    index: Option<u32>,
+    meta: &ItemMeta,
+    title: &str,
+    category: &str,
+    dest: &Path,
+    info: &VideoInfo,
+    at: i64,
+) -> VResult<()> {
+    let ext = dest.extension().and_then(|e| e.to_str()).unwrap_or("");
+    let plidx = index.map(|i| i.to_string()).unwrap_or_else(|| "NULL".to_string());
+    // SCHEMA นำหน้าทุกครั้ง (idempotent, ถูก) — ไม่ต้อง init แยก
+    let sql = format!(
+        "{schema}\nINSERT INTO downloads \
+         (source_url, video_id, webpage_url, title, category, dest_path, ext, \
+          width, height, vcodec, acodec, size_bytes, uploader, upload_date, duration, extractor, \
+          playlist_index, downloaded_at) \
+         VALUES ({su},{vid},{wu},{ti},{cat},{dp},{ex},{w},{h},{vc},{ac},{sz},{up},{ud},{dur},{exr},{pi},{at}) \
+         ON CONFLICT(dest_path) DO UPDATE SET \
+          source_url=excluded.source_url, video_id=excluded.video_id, webpage_url=excluded.webpage_url, \
+          title=excluded.title, category=excluded.category, ext=excluded.ext, \
+          width=excluded.width, height=excluded.height, vcodec=excluded.vcodec, acodec=excluded.acodec, \
+          size_bytes=excluded.size_bytes, uploader=excluded.uploader, upload_date=excluded.upload_date, \
+          duration=excluded.duration, extractor=excluded.extractor, playlist_index=excluded.playlist_index, \
+          downloaded_at=excluded.downloaded_at;",
+        schema = SCHEMA,
+        su = sql_quote(source_url),
+        vid = sql_quote(&meta.video_id),
+        wu = sql_quote(&meta.webpage_url),
+        ti = sql_quote(title),
+        cat = sql_quote(category),
+        dp = sql_quote(&dest.display().to_string()),
+        ex = sql_quote(ext),
+        w = sql_quote(&info.width),
+        h = sql_quote(&info.height),
+        vc = sql_quote(&info.vcodec),
+        ac = sql_quote(&info.acodec),
+        sz = info.size_bytes,
+        up = sql_quote(&meta.uploader),
+        ud = sql_quote(&meta.upload_date),
+        dur = sql_quote(&meta.duration),
+        exr = sql_quote(&meta.extractor),
+        pi = plidx,
+        at = at,
+    );
+    run_sql(&index_db_path(), &sql).map(|_| ())
+}
+
+/// บันทึก 1 รายการลง index (downloaded_at = ตอนนี้). best-effort: ไม่มี sqlite3 → Ok เงียบ.
+/// source_url = URL ที่ผู้ใช้ใส่ (playlist = URL ทั้งชุด); meta.webpage_url = URL ต่อ item จริง
+pub fn index_record(
+    source_url: &str,
+    index: Option<u32>,
+    meta: &ItemMeta,
+    title: &str,
+    category: &str,
+    dest: &Path,
+    info: &VideoInfo,
+) -> VResult<()> {
+    if sqlite3_path().is_none() {
+        return Ok(());
+    }
+    index_record_at(source_url, index, meta, title, category, dest, info, now_epoch())
+}
+
+fn is_video_file(p: &Path) -> bool {
+    matches!(
+        p.extension().and_then(|e| e.to_str()).map(|e| e.to_lowercase()).as_deref(),
+        Some("mp4" | "mkv" | "webm" | "mov" | "m4v" | "avi" | "flv" | "mp3" | "m4a" | "opus" | "wav")
+    )
+}
+
+/// เดินโฟลเดอร์ปลายทางหาไฟล์วิดีโอ (ข้าม .vdo-dl และ tmp)
+fn collect_videos(dir: &Path, out: &mut Vec<PathBuf>) {
+    let entries = match fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+    for e in entries.flatten() {
+        let p = e.path();
+        if p.is_dir() {
+            let name = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+            if name == ".vdo-dl" || name == "tmp" {
+                continue;
+            }
+            collect_videos(&p, out);
+        } else if is_video_file(&p) {
+            out.push(p);
+        }
+    }
+}
+
+/// สแกนไฟล์วิดีโอใน vdo_root ที่ยังไม่อยู่ใน index แล้วเพิ่มเข้า. provenance ของเก่ากู้ได้แค่จากตัวไฟล์
+/// (ความละเอียด/ขนาด/หมวด=โฟลเดอร์ชั้นแรก/ชื่อ/เวลา=mtime) — source URL กู้ไม่ได้ จึงเว้นว่าง.
+/// คืนจำนวนรายการที่เพิ่มใหม่
+pub fn backfill_index(ffprobe: &Path, on: &Log) -> VResult<usize> {
+    if sqlite3_path().is_none() {
+        return Err("ไม่มี sqlite3 บนเครื่องนี้ — ติดตั้งก่อน (mac: มากับ OS)".into());
+    }
+    let db = index_db_path();
+    run_sql(&db, SCHEMA)?;
+    let existing_raw = run_sql(&db, ".mode list\nSELECT dest_path FROM downloads;")?;
+    let existing: std::collections::HashSet<String> =
+        existing_raw.lines().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+
+    let root = vdo_root();
+    let mut files = Vec::new();
+    collect_videos(&root, &mut files);
+
+    let mut added = 0usize;
+    for f in files {
+        let p = f.display().to_string();
+        if existing.contains(&p) {
+            continue;
+        }
+        let category = f
+            .strip_prefix(&root)
+            .ok()
+            .and_then(|r| r.components().next())
+            .map(|c| c.as_os_str().to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let title = f.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+        let info = verify(ffprobe, &f);
+        let mtime = fs::metadata(&f)
+            .ok()
+            .and_then(|m| m.modified().ok())
+            .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or_else(now_epoch);
+        if index_record_at("", None, &ItemMeta::default(), &title, &category, &f, &info, mtime).is_ok() {
+            added += 1;
+            on(&format!("เพิ่ม: {}", p));
+        }
+    }
+    Ok(added)
+}
+
+/// ค้น index — match title/uploader/category/url/extractor. q ว่าง = แสดงล่าสุดทั้งหมด. คืนตารางพร้อมพิมพ์
+pub fn search_index(q: &str) -> VResult<String> {
+    let where_clause = if q.trim().is_empty() {
+        String::new()
+    } else {
+        let p = sql_quote(&format!("%{}%", q.trim()));
+        format!(
+            "WHERE title LIKE {p} OR uploader LIKE {p} OR category LIKE {p} \
+             OR source_url LIKE {p} OR webpage_url LIKE {p} OR extractor LIKE {p}"
+        )
+    };
+    let sql = format!(
+        "{schema}\n.headers on\n.mode column\nSELECT \
+         datetime(downloaded_at,'unixepoch','localtime') AS time, \
+         category AS cat, substr(title,1,40) AS title, uploader, extractor AS src, \
+         source_url AS url \
+         FROM downloads {where_clause} ORDER BY downloaded_at DESC LIMIT 50;",
+        schema = SCHEMA
+    );
+    run_sql(&index_db_path(), &sql)
 }
 
 // ---------- verify ----------
@@ -775,6 +1080,7 @@ pub fn write_m3u(dir: &Path, name: &str, files: &[PathBuf]) -> VResult<PathBuf> 
 pub fn probe_playlist(url: &str, cookies: &Cookies) -> VResult<(String, Vec<String>)> {
     let yt = find_tool("yt-dlp", "--version").ok_or("ยังไม่มี yt-dlp")?;
     let mut cmd = Command::new(yt);
+    prepend_tool_path(&mut cmd);
     cmd.args(["--flat-playlist", "--no-warnings"])
         .args(["--print", "%(playlist_title)s:::%(title)s"])
         .args(cookie_args(cookies))
@@ -829,6 +1135,7 @@ pub fn update(log: &Log) -> VResult<()> {
 pub fn probe_meta(url: &str, cookies: &Cookies) -> VResult<(String, String)> {
     let yt = find_tool("yt-dlp", "--version").ok_or("ยังไม่มี yt-dlp")?;
     let mut cmd = Command::new(yt);
+    prepend_tool_path(&mut cmd);
     cmd.args(["--skip-download", "--no-warnings", "--no-playlist"])
         .args(["--print", "%(title)s", "--print", "%(thumbnail)s"])
         .args(cookie_args(cookies))
@@ -998,6 +1305,10 @@ mod tests {
         assert!(friendly_error("ERROR: This video is DRM protected").contains("DRM"));
         assert!(friendly_error("ERROR: HTTP Error 403: Forbidden").contains("403"));
         assert!(friendly_error("ERROR: Please sign in to view").contains("ล็อกอิน"));
+        assert!(friendly_error("ERROR: [youtube] Y3HfV4IroCU: This live event will begin in 24 hours.").contains("ยังไม่เริ่ม"));
+        assert!(friendly_error("ERROR: [youtube] abc: Premieres in 3 minutes").contains("ยังไม่เริ่ม"));
+        assert!(friendly_error("ERROR: [youtube] abc: This live stream recording is not available.").contains("ย้อนหลัง"));
+        assert!(friendly_error("ERROR: [youtube] oQB8lYUZtrY: Requested format is not available. Use --list-formats for a list of available formats").contains("deno"));
         assert!(friendly_error("").contains("ไม่สำเร็จ"));
         // error อื่นๆ คงข้อความดิบไว้ (ตัด ERROR: ออก)
         assert!(friendly_error("ERROR: Video unavailable").contains("Video unavailable"));
@@ -1021,5 +1332,13 @@ mod tests {
             cookie_args(&Cookies::from(None, Some("/x/c.txt".into()))),
             vec!["--cookies", "/x/c.txt"]
         );
+    }
+
+    #[test]
+    fn wait_for_video_args_builds() {
+        assert!(wait_for_video_args(None).is_empty());
+        assert_eq!(wait_for_video_args(Some(60)), vec!["--wait-for-video", "60"]);
+        // default DownloadOpts ไม่รอ
+        assert!(DownloadOpts::default().wait_for_video.is_none());
     }
 }

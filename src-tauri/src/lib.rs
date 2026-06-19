@@ -145,6 +145,7 @@ async fn download_video(
     playlist: bool,
     cookies_browser: Option<String>,
     cookies_file: Option<String>,
+    wait_for_video: Option<u32>, // รอไลฟ์/พรีเมียร์ที่ตั้งเวลา: ช่วง poll (วินาที); None = ไม่รอ
 ) -> Result<DownloadResult, String> {
     let cookies = core::Cookies::from(cookies_browser, cookies_file);
     let map = jobs.0.clone(); // clone Arc ก่อน await (ไม่ถือ State ข้าม await)
@@ -182,6 +183,7 @@ async fn download_video(
             let category = category.clone();
             let subfolder = subfolder.clone();
             let dests = dests.clone();
+            let url = url.clone();
             move |ev: core::DlEvent| match ev {
                 core::DlEvent::Progress { index, pct } => {
                     let _ = app.emit(
@@ -192,7 +194,7 @@ async fn download_video(
                 core::DlEvent::Status { line, .. } => {
                     let _ = app.emit("vdo://status", StatusEvent { id, text: line.to_string() });
                 }
-                core::DlEvent::ItemDone { index, path } => {
+                core::DlEvent::ItemDone { index, path, meta } => {
                     if !playlist {
                         // คลิปเดี่ยว: flip bar เต็ม (filing ทำหลัง download คืน)
                         let _ = app.emit(
@@ -204,6 +206,13 @@ async fn download_video(
                     match core::file_into_dir(&path, &category, &subfolder) {
                         Ok(dest) => {
                             let v = core::verify(&ffprobe, &dest);
+                            // index แต่ละ item — title จาก yt-dlp (fallback ชื่อไฟล์), source = URL ทั้งชุด
+                            let item_title = if !meta.title.is_empty() {
+                                meta.title.clone()
+                            } else {
+                                dest.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default()
+                            };
+                            let _ = core::index_record(&url, index, &meta, &item_title, &category, &dest, &v);
                             let _ = app.emit(
                                 "vdo://item",
                                 ItemEvent {
@@ -236,6 +245,7 @@ async fn download_video(
             sub_langs,
             playlist,
             cookies,
+            wait_for_video,
         };
         let items = core::download(&tools, &url, &core::vdo_root().join("tmp"), &opts, &flag, &on)?;
 
@@ -262,12 +272,15 @@ async fn download_video(
         }
 
         // วิดีโอเดี่ยว
-        let (_idx, file) = &items[0];
+        let it = &items[0];
+        let file = &it.path;
         let v = core::verify(&tools.ffprobe, file);
         let final_path = if title.trim().is_empty() {
             file.clone()
         } else {
-            core::file_into(file, &category, &title)?
+            let dest = core::file_into(file, &category, &title)?;
+            let _ = core::index_record(&url, it.index, &it.meta, &title, &category, &dest, &v);
+            dest
         };
 
         Ok::<DownloadResult, String>(DownloadResult {
