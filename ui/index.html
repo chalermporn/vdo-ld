@@ -37,6 +37,32 @@
   #list::-webkit-scrollbar{width:10px}
   #list::-webkit-scrollbar-thumb{background:var(--line);border-radius:8px}
   [data-lucide]{width:18px;height:18px}
+
+  /* ---------- modal (settings + confirm) ---------- */
+  .modal-back{background:rgba(15,23,36,.5);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);animation:vdoFade .16s ease}
+  html.dark .modal-back{background:rgba(4,8,12,.62)}
+  .modal-card{animation:vdoPop .22s cubic-bezier(.2,.85,.25,1)}
+  @keyframes vdoFade{from{opacity:0}to{opacity:1}}
+  @keyframes vdoPop{from{opacity:0;transform:translateY(10px) scale(.97)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion:reduce){.modal-back,.modal-card{animation:none}}
+  .modal-card ::-webkit-scrollbar{width:9px}
+  .modal-card ::-webkit-scrollbar-thumb{background:var(--line);border-radius:8px}
+  .modal-card ::-webkit-scrollbar-thumb:hover{background:var(--muted)}
+  /* setting section cards */
+  .set-card{background:var(--field);border:1px solid var(--line);border-radius:14px}
+  /* คุกกี้: radio card เลือกแล้วไฮไลต์ผ่าน :has() (WKWebView ≥15.4 / WebView2 Chromium รองรับ) */
+  .ck-card{display:flex;gap:10px;align-items:flex-start;padding:11px 12px;border:1px solid var(--line);
+    border-radius:12px;background:var(--panel);cursor:pointer;transition:border-color .15s,background .15s,box-shadow .15s}
+  .ck-card:hover{background:var(--hover)}
+  .ck-card:has(input:checked){border-color:var(--green);background:rgba(11,136,238,.07);box-shadow:0 0 0 1px var(--green) inset}
+  .ck-card input[type=radio]{margin-top:2px;accent-color:var(--green);width:15px;height:15px;flex:none;cursor:pointer}
+  /* segmented control (ธีม) */
+  .seg{display:inline-flex;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:3px;gap:3px}
+  .seg button{display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:600;
+    color:var(--muted);cursor:pointer;transition:.15s}
+  .seg button:hover{color:var(--ink)}
+  .seg button[aria-pressed=true]{background:var(--panel);color:var(--green);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+  html.dark .seg button[aria-pressed=true]{background:var(--hover)}
 </style>
 </head>
 <body>
@@ -109,38 +135,117 @@
     </div>
   </div>
 
-  <!-- settings -->
-  <div id="settings" class="hidden px-4 py-3 border-b line text-[13px] shrink-0" style="background:var(--field)">
-    <div class="max-w-2xl mx-auto space-y-2">
-      <div class="flex items-center justify-between gap-2"><span class="muted">โฟลเดอร์เก็บ</span><code id="set-root" class="ink truncate">~/VDO</code></div>
-      <div class="flex items-center justify-between gap-2">
-        <span class="muted">เครื่องมือ (yt-dlp / ffmpeg)</span>
-        <button onclick="doUpdate()" class="btn-green text-white rounded-md px-3 py-1.5 flex items-center gap-1.5 shrink-0"><i data-lucide="refresh-cw" style="color:#fff;width:14px;height:14px"></i> อัปเดต</button>
+  <!-- settings modal -->
+  <div id="settings" class="hidden fixed inset-0 z-50 grid place-items-center p-4 sm:p-6 modal-back">
+    <div class="modal-card panel border line rounded-2xl shadow-2xl w-full max-w-lg max-h-[88vh] flex flex-col overflow-hidden"
+         role="dialog" aria-modal="true" aria-labelledby="set-h">
+
+      <!-- header -->
+      <header class="flex items-center gap-2.5 px-5 h-14 border-b line shrink-0">
+        <span class="grid place-items-center w-8 h-8 rounded-xl" style="background:rgba(11,136,238,.12)">
+          <i data-lucide="settings" style="color:var(--green)"></i>
+        </span>
+        <h2 id="set-h" class="text-base font-bold ink">ตั้งค่า</h2>
+        <button onclick="closeSettings()" class="ml-auto grid place-items-center w-9 h-9 rounded-lg pill" aria-label="ปิด" title="ปิด (Esc)">
+          <i data-lucide="x"></i>
+        </button>
+      </header>
+
+      <!-- body (scroll) -->
+      <div class="flex-1 overflow-y-auto px-5 py-4 space-y-5 text-[13px]">
+
+        <!-- ธีม -->
+        <section>
+          <div class="flex items-center gap-2 mb-2">
+            <i data-lucide="palette" style="width:15px;height:15px;color:var(--muted)"></i>
+            <span class="ink font-semibold">ธีม</span>
+          </div>
+          <div id="theme-seg" class="seg" role="group" aria-label="เลือกธีม">
+            <button type="button" data-theme="light" onclick="setTheme('light')" aria-pressed="true"><i data-lucide="sun" style="width:15px;height:15px"></i> สว่าง</button>
+            <button type="button" data-theme="dark" onclick="setTheme('dark')" aria-pressed="false"><i data-lucide="moon" style="width:15px;height:15px"></i> มืด</button>
+          </div>
+        </section>
+
+        <!-- ปลายทาง -->
+        <section>
+          <div class="flex items-center gap-2 mb-2">
+            <i data-lucide="folder" style="width:15px;height:15px;color:var(--muted)"></i>
+            <span class="ink font-semibold">โฟลเดอร์ปลายทาง</span>
+          </div>
+          <div class="set-card p-3 flex items-center gap-2">
+            <i data-lucide="hard-drive" style="width:16px;height:16px;color:var(--green)" class="shrink-0"></i>
+            <code id="set-root" class="ink truncate flex-1 text-xs">~/VDO</code>
+            <button onclick="copyRoot()" class="pill grid place-items-center w-8 h-8 rounded-lg shrink-0" title="คัดลอกที่อยู่" aria-label="คัดลอกที่อยู่"><i data-lucide="copy" style="width:15px;height:15px"></i></button>
+            <button onclick="openRoot()" class="pill grid place-items-center w-8 h-8 rounded-lg shrink-0" title="เปิดในไฟล์เบราว์เซอร์" aria-label="เปิดโฟลเดอร์"><i data-lucide="folder-open" style="width:15px;height:15px"></i></button>
+          </div>
+        </section>
+
+        <!-- เครื่องมือ -->
+        <section>
+          <div class="flex items-center gap-2 mb-2">
+            <i data-lucide="wrench" style="width:15px;height:15px;color:var(--muted)"></i>
+            <span class="ink font-semibold">เครื่องมือ</span>
+          </div>
+          <div class="set-card p-3 flex items-center gap-3">
+            <span class="grid place-items-center w-9 h-9 rounded-xl shrink-0" style="background:rgba(11,136,238,.10)"><i data-lucide="package" style="width:18px;height:18px;color:var(--green)"></i></span>
+            <div class="flex-1 min-w-0">
+              <p class="ink font-semibold">yt-dlp + ffmpeg</p>
+              <p class="muted text-xs mt-0.5">ดาวน์โหลด &amp; จัดการให้อัตโนมัติ</p>
+            </div>
+            <button onclick="doUpdate()" class="btn-green text-white font-semibold rounded-lg px-3 py-2 flex items-center gap-1.5 shrink-0"><i data-lucide="refresh-cw" style="color:#fff;width:14px;height:14px"></i> อัปเดต</button>
+          </div>
+        </section>
+
+        <!-- บัญชี / คุกกี้ -->
+        <section>
+          <div class="flex items-center gap-2 mb-2">
+            <i data-lucide="key-round" style="width:15px;height:15px;color:var(--muted)"></i>
+            <span class="ink font-semibold">บัญชี / คุกกี้</span>
+            <span class="muted text-xs ml-auto text-right">สำหรับเนื้อหาที่ต้องล็อกอิน</span>
+          </div>
+          <div class="space-y-2">
+            <label class="ck-card">
+              <input type="radio" name="ck" value="none" checked>
+              <span class="flex-1 min-w-0">
+                <span class="ink font-medium flex items-center gap-1.5">ไม่ใช้คุกกี้ <span class="muted text-[11px] font-normal px-1.5 py-0.5 rounded" style="background:var(--hover)">default</span></span>
+                <span class="muted text-xs block mt-0.5">เนื้อหาสาธารณะทั่วไป</span>
+              </span>
+            </label>
+            <label class="ck-card">
+              <input type="radio" name="ck" value="browser">
+              <span class="flex-1 min-w-0">
+                <span class="ink font-medium">ดึงจากเบราว์เซอร์</span>
+                <span class="flex items-center gap-2 mt-1.5">
+                  <i data-lucide="globe" style="width:14px;height:14px;color:var(--muted)" class="shrink-0"></i>
+                  <select id="ckbrowser" onfocus="pickCk('browser')"><option>chrome</option><option>safari</option><option>firefox</option><option>edge</option><option>brave</option><option>chromium</option><option>opera</option><option>vivaldi</option></select>
+                </span>
+              </span>
+            </label>
+            <label class="ck-card">
+              <input type="radio" name="ck" value="file">
+              <span class="flex-1 min-w-0">
+                <span class="ink font-medium">ไฟล์ cookies.txt</span>
+                <span class="flex items-center gap-2 mt-1.5">
+                  <i data-lucide="file-text" style="width:14px;height:14px;color:var(--muted)" class="shrink-0"></i>
+                  <input id="ckfile" placeholder="/path/to/cookies.txt" class="flex-1 min-w-0 px-2 py-1 text-xs" onfocus="pickCk('file')" />
+                </span>
+              </span>
+            </label>
+          </div>
+          <p class="muted text-xs mt-2.5 flex items-start gap-1.5">
+            <i data-lucide="info" style="width:13px;height:13px;margin-top:2px" class="shrink-0"></i>
+            <span>macOS: ดึงจาก Chrome อาจต้อง <b class="ink">ปิด Chrome ก่อน</b> หรือเด้งขออนุญาต keychain · เราจำแค่ตัวเลือก ไม่เก็บตัวคุกกี้ · เนื้อหาที่มี DRM โหลดไม่ได้ (จะข้ามให้)</span>
+          </p>
+        </section>
+
       </div>
 
-      <!-- บัญชี / คุกกี้ -->
-      <div class="rounded-lg p-3 mt-1" style="background:var(--panel);border:1px solid var(--line)">
-        <div class="flex items-center gap-2 mb-2">
-          <i data-lucide="key-round" style="width:15px;height:15px;color:var(--green)"></i>
-          <span class="ink font-semibold">บัญชี / คุกกี้</span>
-          <span class="muted text-xs ml-auto">สำหรับเนื้อหาที่ต้องล็อกอิน (เช่น คอร์สที่ enroll)</span>
-        </div>
-        <div class="space-y-1.5">
-          <label class="flex items-center gap-2"><input type="radio" name="ck" value="none" checked style="accent-color:var(--green)"> ไม่ใช้คุกกี้ <span class="muted text-xs">(default)</span></label>
-          <label class="flex items-center gap-2"><input type="radio" name="ck" value="browser" style="accent-color:var(--green)"> ดึงจากเบราว์เซอร์
-            <select id="ckbrowser"><option>chrome</option><option>safari</option><option>firefox</option><option>edge</option><option>brave</option><option>chromium</option><option>opera</option><option>vivaldi</option></select>
-          </label>
-          <label class="flex items-center gap-2"><input type="radio" name="ck" value="file" style="accent-color:var(--green)"> ไฟล์ cookies.txt
-            <input id="ckfile" placeholder="/path/to/cookies.txt" class="flex-1 min-w-0 px-2 py-1 text-xs" />
-          </label>
-        </div>
-        <p class="muted text-xs mt-2 flex items-start gap-1.5">
-          <i data-lucide="info" style="width:13px;height:13px;margin-top:2px"></i>
-          <span>macOS: ดึงจาก Chrome อาจต้อง <b class="ink">ปิด Chrome ก่อน</b> หรือเด้งขออนุญาต keychain · เราจำแค่ตัวเลือก ไม่เก็บตัวคุกกี้ · เนื้อหาที่มี DRM โหลดไม่ได้ (จะข้ามให้)</span>
-        </p>
-      </div>
-
-      <p class="muted text-xs">ค่า โหมด/คุณภาพ/หมวด/คุกกี้ ถูกจำอัตโนมัติเมื่อเปลี่ยน</p>
+      <!-- footer -->
+      <footer class="px-5 py-3 border-t line shrink-0 flex items-center gap-2">
+        <i data-lucide="check-circle-2" style="width:14px;height:14px;color:var(--ok)" class="shrink-0"></i>
+        <span class="muted text-xs">ค่า โหมด/คุณภาพ/หมวด/คุกกี้ ถูกจำอัตโนมัติเมื่อเปลี่ยน</span>
+        <button onclick="closeSettings()" class="btn-green text-white text-[13px] font-semibold rounded-lg px-4 py-2 ml-auto shrink-0">เสร็จ</button>
+      </footer>
     </div>
   </div>
 
@@ -306,7 +411,7 @@ function childHtml(c){
   const badge = c.state==='done'
     ? `<span class="text-[11px] px-2 py-0.5 rounded-full" style="background:rgba(56,203,137,.16);color:var(--ok-d)">เสร็จ</span>`
     : c.state==='skip'
-    ? `<span class="text-[11px] px-2 py-0.5 rounded-full" style="background:rgba(245,158,11,.16);color:#d97706">${/drm/i.test(c.err||'')?'ข้าม · DRM':'ข้าม'}</span>`
+    ? `<span class="text-[11px] px-2 py-0.5 rounded-full" style="background:rgba(245,158,11,.16);color:#d97706">${/drm/i.test(c.err||'')?'ข้าม · DRM':/ไลฟ์|ยังไม่เริ่ม|พรีเมียร์/.test(c.err||'')?'ข้าม · ยังไม่เริ่ม':'ข้าม'}</span>`
     : c.state==='dl'
     ? `<span class="text-[11px] muted">${c.pct>=100?'merge…':Math.round(c.pct||0)+'%'}</span>`
     : `<span class="text-[11px] px-2 py-0.5 rounded-full" style="background:var(--hover);color:var(--muted)">รอคิว</span>`;
@@ -322,7 +427,7 @@ function childHtml(c){
   }
   return `<div class="dlchild flex items-center gap-3 panel border line rounded-xl p-2.5" style="margin-left:22px">
     <div class="relative w-16 h-10 rounded-lg shrink-0 overflow-hidden grid place-items-center" style="background:${c.state==='skip'?'var(--hover)':'rgba(11,136,238,.10)'}">
-      <i data-lucide="${c.state==='skip'?'lock':'play'}" style="color:${c.state==='skip'?'var(--muted)':'var(--green)'};width:18px;height:18px"></i>
+      <i data-lucide="${c.state==='skip'?(/ไลฟ์|ยังไม่เริ่ม|พรีเมียร์/.test(c.err||'')?'clock':'lock'):'play'}" style="color:${c.state==='skip'?'var(--muted)':'var(--green)'};width:18px;height:18px"></i>
     </div>
     <div class="flex-1 min-w-0">
       <div class="flex items-center gap-2">
@@ -433,13 +538,13 @@ async function startPlaylist(url, title){
       container:o.container, audioFmt:o.audioFmt, audioQuality:o.audioQuality, subs:o.subs, subLangs:o.subLangs, playlist:true, ...cookieArgs() });
     parent.state='done'; parent.path=res.path; parent.count=res.count;
     // ลูกที่ไม่ได้ไฟล์ (ไม่เคยเสร็จ) → ถือว่าข้าม (ถ้า job เจอ DRM ระบุว่าเป็น DRM)
-    rows.filter(c=>c.parentId===pid && c.state!=='done').forEach(c=>{ c.state='skip'; if(!c.err) c.err = parent._drm ? 'วิดีโอมี DRM — โหลดไม่ได้' : 'ไม่ได้ไฟล์'; });
+    rows.filter(c=>c.parentId===pid && c.state!=='done').forEach(c=>{ c.state='skip'; if(!c.err) c.err = parent._drm ? 'วิดีโอมี DRM — โหลดไม่ได้' : parent._live ? 'ไลฟ์ยังไม่เริ่ม' : 'ไม่ได้ไฟล์'; });
     setStat('playlist เสร็จ · '+res.count+' ไฟล์ · '+res.path);
   }catch(e){
     const msg=String(e?.message||e);
     parent.state = /ยกเลิก/.test(msg) ? 'cancel' : 'error';
     parent.err = msg;
-    rows.filter(c=>c.parentId===pid && (c.state==='dl'||c.state==='queue')).forEach(c=>{ c.state='skip'; });
+    rows.filter(c=>c.parentId===pid && (c.state==='dl'||c.state==='queue')).forEach(c=>{ c.state='skip'; if(!c.err) c.err = parent._live ? 'ไลฟ์ยังไม่เริ่ม' : (/ยังไม่เริ่ม|ไลฟ์|พรีเมียร์/.test(msg) ? 'ไลฟ์ยังไม่เริ่ม' : ''); });
     setStat(parent.state==='cancel'?'ยกเลิกแล้ว':'ผิดพลาด: '+msg);
   }
   render();
@@ -530,10 +635,27 @@ async function doUpdate(){
 // ---------- ui toggles ----------
 function applySmart(){ const b=$('smart'); b.style.background=smart?'rgba(11,136,238,.14)':''; b.style.color=smart?'var(--green-d)':''; }
 function toggleSmart(){ smart=!smart; localStorage.setItem(LS.smart, smart?'1':'0'); applySmart(); }
-function toggleSettings(){ $('settings').classList.toggle('hidden'); $('composer').classList.add('hidden'); }
-function toggleTheme(){ const h=document.documentElement; h.classList.toggle('dark'); h.classList.toggle('light');
-  const dark=h.classList.contains('dark'); localStorage.setItem(LS.theme, dark?'dark':'light');
-  $('theme-i').setAttribute('data-lucide', dark?'sun':'moon'); lucide.createIcons(); }
+
+// ---------- settings modal ----------
+function openSettings(){ $('composer').classList.add('hidden'); $('settings').classList.remove('hidden'); syncThemeUI(); }
+function closeSettings(){ $('settings').classList.add('hidden'); }
+function toggleSettings(){ $('settings').classList.contains('hidden') ? openSettings() : closeSettings(); }
+async function copyRoot(){ const p=$('set-root').textContent||''; try{ await navigator.clipboard.writeText(p); setStat('คัดลอกที่อยู่แล้ว · '+p); }catch(e){ setStat('คัดลอกไม่ได้'); } }
+async function openRoot(){ const p=$('set-root').textContent||''; if(inTauri){ try{ await invoke('reveal',{path:p}); }catch(e){ setStat('เปิดโฟลเดอร์ไม่ได้: '+e); } } }
+// โฟกัส select/ไฟล์ในการ์ดคุกกี้ → เลือก radio ของการ์ดนั้นให้อัตโนมัติ
+function pickCk(v){ const el=document.querySelector(`input[name=ck][value="${v}"]`); if(el && !el.checked){ el.checked=true; el.dispatchEvent(new Event('change',{bubbles:true})); } }
+
+// ---------- theme ----------
+function syncThemeUI(){
+  const dark=document.documentElement.classList.contains('dark');
+  $('theme-i').setAttribute('data-lucide', dark?'sun':'moon');
+  document.querySelectorAll('#theme-seg button').forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.theme===(dark?'dark':'light'))));
+  lucide.createIcons();
+}
+function setTheme(mode){ const h=document.documentElement;
+  h.classList.toggle('dark', mode==='dark'); h.classList.toggle('light', mode!=='dark');
+  localStorage.setItem(LS.theme, mode); syncThemeUI(); }
+function toggleTheme(){ setTheme(document.documentElement.classList.contains('dark')?'light':'dark'); }
 
 function demo(row){
   setStat('(เดโม) กำลังโหลด…');
@@ -589,6 +711,11 @@ async function init(){
     const txt=(e.dataTransfer.getData('text/uri-list')||e.dataTransfer.getData('text/plain')||'').trim();
     if(isUrl(txt)){ smart ? launch(txt,'') : openComposer(txt); } });
   $('modal').addEventListener('click',e=>{ if(e.target===$('modal')) closeModal(); });
+  $('settings').addEventListener('click',e=>{ if(e.target===$('settings')) closeSettings(); });
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape'){
+    if(!$('settings').classList.contains('hidden')) closeSettings();
+    else if(!$('modal').classList.contains('hidden')) closeModal();
+  }});
 
   if(!inTauri){ setStat('(เดโม ในเบราว์เซอร์ — เปิดผ่านแอปเพื่อโหลดจริง)'); return; }
 
@@ -618,6 +745,7 @@ async function init(){
     const r=rows.find(x=>x.id===e.payload.id);
     if(r){
       if(/drm/i.test(t)) r._drm=true;  // job เจอ DRM → ใช้ระบุเหตุผลของลูกที่ข้าม
+      if(/live event will begin|premieres? (will begin|in )|will begin in|this live event/i.test(t)) r._live=true; // ไลฟ์/พรีเมียร์ยังไม่เริ่ม
       if(!r.isGroup && /merge|ตรวจไฟล์/.test(t) && r.state==='dl'){ r.state='merge'; render(); }
     }
   });
