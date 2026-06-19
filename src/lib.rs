@@ -957,24 +957,59 @@ pub fn backfill_index(ffprobe: &Path, on: &Log) -> VResult<usize> {
 
 /// ค้น index — match title/uploader/category/url/extractor. q ว่าง = แสดงล่าสุดทั้งหมด. คืนตารางพร้อมพิมพ์
 pub fn search_index(q: &str) -> VResult<String> {
-    let where_clause = if q.trim().is_empty() {
-        String::new()
-    } else {
-        let p = sql_quote(&format!("%{}%", q.trim()));
-        format!(
-            "WHERE title LIKE {p} OR uploader LIKE {p} OR category LIKE {p} \
-             OR source_url LIKE {p} OR webpage_url LIKE {p} OR extractor LIKE {p}"
-        )
-    };
     let sql = format!(
         "{schema}\n.headers on\n.mode column\nSELECT \
          datetime(downloaded_at,'unixepoch','localtime') AS time, \
          category AS cat, substr(title,1,40) AS title, uploader, extractor AS src, \
          source_url AS url \
          FROM downloads {where_clause} ORDER BY downloaded_at DESC LIMIT 50;",
-        schema = SCHEMA
+        schema = SCHEMA,
+        where_clause = search_where(q)
     );
     run_sql(&index_db_path(), &sql)
+}
+
+/// SQL WHERE สำหรับ free-text search (match title/uploader/category/url/extractor). q ว่าง = ""
+fn search_where(q: &str) -> String {
+    if q.trim().is_empty() {
+        return String::new();
+    }
+    let p = sql_quote(&format!("%{}%", q.trim()));
+    format!(
+        "WHERE title LIKE {p} OR uploader LIKE {p} OR category LIKE {p} \
+         OR source_url LIKE {p} OR webpage_url LIKE {p} OR extractor LIKE {p}"
+    )
+}
+
+/// ค้น index คืนเป็น JSON array (สำหรับ GUI). q ว่าง = ล่าสุดทั้งหมด. ไม่มี sqlite3 → "[]"
+pub fn search_json(q: &str) -> VResult<String> {
+    if sqlite3_path().is_none() {
+        return Ok("[]".to_string());
+    }
+    let sql = format!(
+        "{schema}\n.mode json\nSELECT id, downloaded_at, title, category, uploader, \
+         upload_date, duration, extractor, source_url, webpage_url, dest_path, \
+         width, height, size_bytes, playlist_index \
+         FROM downloads {where_clause} ORDER BY downloaded_at DESC LIMIT 200;",
+        schema = SCHEMA,
+        where_clause = search_where(q)
+    );
+    let out = run_sql(&index_db_path(), &sql)?;
+    let t = out.trim();
+    Ok(if t.is_empty() { "[]".to_string() } else { t.to_string() })
+}
+
+/// ลบรายการออกจาก index ตาม dest_path (เรียกหลังลบไฟล์จริง). best-effort
+pub fn index_forget(dest_path: &str) -> VResult<()> {
+    if sqlite3_path().is_none() {
+        return Ok(());
+    }
+    let sql = format!(
+        "{schema}\nDELETE FROM downloads WHERE dest_path={dp};",
+        schema = SCHEMA,
+        dp = sql_quote(dest_path)
+    );
+    run_sql(&index_db_path(), &sql).map(|_| ())
 }
 
 // ---------- verify ----------
@@ -1190,6 +1225,21 @@ pub fn reveal_path(path: &str) -> VResult<()> {
         let dir = p.parent().unwrap_or(p);
         let _ = Command::new("xdg-open").arg(dir).status();
     }
+    Ok(())
+}
+
+/// เปิด URL ในเบราว์เซอร์เริ่มต้นของ OS — รับเฉพาะ http/https (กันสั่งเปิด scheme อันตราย)
+pub fn open_url(url: &str) -> VResult<()> {
+    let u = url.trim();
+    if !(u.starts_with("http://") || u.starts_with("https://")) {
+        return Err("URL ไม่ถูกต้อง".into());
+    }
+    #[cfg(target_os = "macos")]
+    let _ = Command::new("open").arg(u).status();
+    #[cfg(windows)]
+    let _ = Command::new("cmd").args(["/C", "start", "", u]).status();
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let _ = Command::new("xdg-open").arg(u).status();
     Ok(())
 }
 

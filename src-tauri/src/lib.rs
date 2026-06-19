@@ -112,10 +112,30 @@ fn reveal(path: String) -> Result<(), String> {
     core::reveal_path(&path)
 }
 
-/// ลบไฟล์ในดิสก์ (ใต้ ~/VDO)
+/// ลบไฟล์ในดิสก์ (ใต้ ~/VDO) + ลบออกจาก index ด้วย
 #[tauri::command]
 fn delete_file(path: String) -> Result<(), String> {
-    core::delete_file(&path)
+    core::delete_file(&path)?;
+    let _ = core::index_forget(&path);
+    Ok(())
+}
+
+/// ค้นประวัติที่เคยโหลดจาก index DB — คืน JSON array string ให้ frontend parse เอง
+#[tauri::command]
+fn search_history(query: String) -> Result<String, String> {
+    core::search_json(&query)
+}
+
+/// เปิด URL ต้นทางในเบราว์เซอร์
+#[tauri::command]
+fn open_url(url: String) -> Result<(), String> {
+    core::open_url(&url)
+}
+
+/// เอารายการออกจากประวัติ (index) โดยไม่ลบไฟล์ — ใช้เมื่อไฟล์ถูกย้าย/ลบนอกแอป
+#[tauri::command]
+fn forget_history(path: String) -> Result<(), String> {
+    core::index_forget(&path)
 }
 
 /// ยกเลิกการโหลดของ id นั้น
@@ -336,6 +356,9 @@ pub fn run() {
             clipboard,
             reveal,
             delete_file,
+            search_history,
+            open_url,
+            forget_history,
             cancel_download,
             download_video,
             update_tools

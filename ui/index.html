@@ -255,10 +255,20 @@
       <button data-tab="all" class="rounded-md px-3 py-1.5 font-medium" style="background:var(--green);color:#fff">ทั้งหมด</button>
       <button data-tab="video" class="pill rounded-md px-3 py-1.5 muted">วิดีโอ</button>
       <button data-tab="audio" class="pill rounded-md px-3 py-1.5 muted">เสียง</button>
+      <button data-tab="history" class="pill rounded-md px-3 py-1.5 muted flex items-center gap-1" title="ประวัติที่เคยโหลด (ค้นหาได้)"><i data-lucide="history" style="width:14px;height:14px"></i>ประวัติ</button>
     </div>
-    <button onclick="clearDone()" class="pill rounded-md px-2.5 py-1.5 muted text-xs flex items-center gap-1" title="ล้างรายการที่เสร็จแล้ว (ไม่ลบไฟล์)">
+    <button id="btn-cleardone" onclick="clearDone()" class="pill rounded-md px-2.5 py-1.5 muted text-xs flex items-center gap-1" title="ล้างรายการที่เสร็จแล้ว (ไม่ลบไฟล์)">
       <i data-lucide="list-x" style="width:14px;height:14px"></i><span class="hidden sm:inline">ล้างที่เสร็จ</span>
     </button>
+  </div>
+
+  <!-- search bar (เฉพาะ tab ประวัติ) -->
+  <div id="searchbar" class="hidden px-4 py-2 border-b line panel shrink-0">
+    <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg" style="background:var(--field);border:1px solid var(--line)">
+      <i data-lucide="search" style="width:16px;height:16px;color:var(--muted)"></i>
+      <input id="q-search" oninput="onSearchInput()" placeholder="ค้นจากชื่อ / ผู้ลง / หมวด / URL / แหล่ง…"
+        class="flex-1 min-w-0 text-[13px]" style="background:transparent;border:none;padding:0;border-radius:0" />
+    </div>
   </div>
 
   <!-- list (scroll area, fills window) -->
@@ -269,6 +279,9 @@
       <p class="muted text-xs mt-2">กดปุ่ม “วางลิงก์” ด้านบน หรือ ลากลิงก์มาวางที่หน้าต่างนี้</p>
     </div>
   </main>
+
+  <!-- history / search results (เฉพาะ tab ประวัติ) -->
+  <main id="history" class="hidden flex-1 overflow-y-auto px-4 py-3 space-y-2"></main>
 
   <!-- status bar -->
   <footer class="flex items-center justify-between gap-2 px-4 h-9 border-t line panel text-xs muted shrink-0">
@@ -460,6 +473,82 @@ function render(){
   }
   lucide.createIcons();
   saveRows();
+}
+
+// ---------- history / search ----------
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function fmtDate(ep){ if(!ep) return ''; try{ return new Date(ep*1000).toLocaleString('th-TH',{dateStyle:'medium',timeStyle:'short'}); }catch(e){ return ''; } }
+function fmtSize(b){ b=+b; if(!b) return ''; const u=['B','KB','MB','GB']; let i=0; while(b>=1024&&i<u.length-1){b/=1024;i++;} return b.toFixed(i?1:0)+u[i]; }
+
+// สลับ view ตาม tab: ประวัติ → search + #history; อื่น ๆ → queue เดิม
+function applyTabView(){
+  const hist = activeTab==='history';
+  $('searchbar').classList.toggle('hidden', !hist);
+  $('history').classList.toggle('hidden', !hist);
+  $('list').classList.toggle('hidden', hist);
+  $('btn-cleardone').classList.toggle('hidden', hist);
+  if(hist){ doSearch(); setTimeout(()=>$('q-search').focus(),0); }
+  else render();
+}
+
+let histTimer=null;
+function onSearchInput(){ clearTimeout(histTimer); histTimer=setTimeout(doSearch,250); }
+
+async function doSearch(){
+  const box=$('history'), q=$('q-search').value.trim();
+  if(!inTauri){ box.innerHTML='<div class="muted text-sm p-6 text-center">(เดโม) ค้นหาประวัติได้เฉพาะในแอปจริง</div>'; return; }
+  let items=[];
+  try{ items=JSON.parse((await invoke('search_history',{query:q}))||'[]'); }
+  catch(e){ box.innerHTML='<div class="muted text-sm p-6 text-center">ค้นหาไม่ได้: '+esc(e?.message||e)+'</div>'; return; }
+  if(!items.length){
+    box.innerHTML='<div class="flex flex-col items-center justify-center text-center h-full min-h-[200px] muted">'
+      +'<i data-lucide="search-x" style="width:36px;height:36px"></i>'
+      +'<p class="text-sm mt-3">'+(q?'ไม่พบรายการที่ตรงกับ “'+esc(q)+'”':'ยังไม่มีประวัติการโหลด')+'</p></div>';
+    lucide.createIcons(); return;
+  }
+  box.innerHTML=items.map(histHtml).join('');
+  lucide.createIcons();
+}
+
+function histHtml(it){
+  const meta=[it.category,it.uploader,it.extractor].filter(Boolean).map(esc).join(' · ');
+  const res=(it.height&&it.height!=='?')?it.height+'p':'';
+  const sub=[fmtDate(it.downloaded_at),res,fmtSize(it.size_bytes)].filter(Boolean).join(' · ');
+  const u=it.source_url||it.webpage_url||'';
+  const openBtn=u?`<button data-act="open" class="pill grid place-items-center w-8 h-8 rounded-lg" title="เปิดต้นทาง"><i data-lucide="external-link"></i></button>`:'';
+  return `<div class="histrow panel border line rounded-xl px-3 py-2.5 flex items-center gap-3"
+      data-path="${esc(it.dest_path)}" data-url="${esc(u)}" data-title="${esc(it.title)}">
+    <div class="flex-1 min-w-0">
+      <div class="ink text-sm font-medium truncate">${esc(it.title||baseName(it.dest_path)||'(ไม่มีชื่อ)')}</div>
+      <div class="muted text-xs truncate mt-0.5">${meta||'—'}</div>
+      ${sub?`<div class="muted text-[11px] truncate mt-0.5">${sub}</div>`:''}
+    </div>
+    <div class="flex items-center gap-1 shrink-0">${openBtn}
+      <button data-act="reveal" class="pill grid place-items-center w-8 h-8 rounded-lg" title="เปิดโฟลเดอร์"><i data-lucide="folder-open"></i></button>
+      <button data-act="del" class="pill grid place-items-center w-8 h-8 rounded-lg" title="ลบ"><i data-lucide="trash-2"></i></button>
+    </div>
+  </div>`;
+}
+
+function askDeleteHist(path, title){
+  $('modal-title').textContent='ลบรายการนี้?';
+  $('modal-sub').textContent=title||path||'';
+  const A=$('modal-actions'); A.innerHTML='';
+  const mk=(label,cls,fn,bg)=>{ const b=document.createElement('button');
+    b.className='rounded-lg px-3 py-2 text-[13px] font-semibold '+cls; b.textContent=label; b.onclick=fn;
+    if(bg) b.style.background=bg; A.appendChild(b); };
+  mk('ลบไฟล์ในเครื่อง + ประวัติ','text-white', ()=>delHist(path,true), 'var(--danger)');
+  mk('เอาออกจากประวัติเท่านั้น','border line ink', ()=>delHist(path,false), 'var(--field)');
+  mk('ยกเลิก','muted', closeModal);
+  $('modal').classList.remove('hidden');
+}
+async function delHist(path, withFile){
+  closeModal();
+  try{
+    if(withFile) await invoke('delete_file',{path}); else await invoke('forget_history',{path});
+    setStat(withFile?'ลบไฟล์แล้ว':'เอาออกจากประวัติแล้ว');
+  }catch(e){ setStat('ลบไม่ได้: '+(e?.message||e)); }
+  doSearch();
 }
 
 // ---------- actions ----------
@@ -701,8 +790,18 @@ async function init(){
     activeTab=b.dataset.tab;
     $('tabs').querySelectorAll('button').forEach(x=>{ const on=x===b;
       x.style.background=on?'var(--green)':''; x.style.color=on?'#fff':''; x.classList.toggle('muted',!on); x.classList.toggle('font-medium',on); });
-    render();
+    applyTabView();
   }));
+
+  // ผลค้นหาประวัติ — event delegation (เปิดต้นทาง / เปิดโฟลเดอร์ / ลบ)
+  $('history').addEventListener('click', e=>{
+    const btn=e.target.closest('button[data-act]'); if(!btn) return;
+    const row=btn.closest('.histrow'); if(!row) return;
+    const {path,url,title}=row.dataset, act=btn.dataset.act;
+    if(act==='open'){ if(url && inTauri) invoke('open_url',{url}).catch(er=>setStat('เปิดไม่ได้: '+(er?.message||er))); }
+    else if(act==='reveal'){ if(path && inTauri) invoke('reveal',{path}).catch(er=>setStat('เปิดโฟลเดอร์ไม่ได้: '+(er?.message||er))); }
+    else if(act==='del'){ askDeleteHist(path,title); }
+  });
 
   const drop=$('drop');
   drop.addEventListener('dragover',e=>{ e.preventDefault(); drop.classList.add('drag'); });
