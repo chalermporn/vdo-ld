@@ -3,8 +3,12 @@
 บันทึกการเปลี่ยนแปลงของ `vdo-dl` ทุกเวอร์ชันที่สำคัญ.
 รูปแบบอิงตาม [Keep a Changelog](https://keepachangelog.com/) และใช้ [Semantic Versioning](https://semver.org/).
 
-วิธีออกเวอร์ชันใหม่: ย้ายรายการจาก `[Unreleased]` ขึ้นหัวข้อเวอร์ชัน + ใส่วันที่ แล้ว
-`git tag -a vX.Y.Z -m "..." && git push origin vX.Y.Z` → GitHub Actions build + ปล่อย release ครบทุก OS เอง.
+วิธีออกเวอร์ชันใหม่: ย้ายรายการจาก `[Unreleased]` ขึ้นหัวข้อเวอร์ชัน **ในรูปแบบ `## [X.Y.Z] - <วันที่>`** แล้ว
+`git tag -a vX.Y.Z -m "..." && git push origin vX.Y.Z` → GitHub Actions build + ปล่อย release ครบทุก OS เอง
+(ดึง section นี้เป็น release notes ให้อัตโนมัติ).
+
+> ⚠️ ถ้า tag `vX.Y.Z` ทั้งที่ยังไม่มีหัวข้อ `## [X.Y.Z]` ตรงกัน → workflow (`changelog-check`) จะ **fail ก่อน build**
+> เพื่อกันลืมเปลี่ยน header. แก้หัวข้อให้ตรงแล้ว push tag ใหม่.
 
 ## [Unreleased] / v0.1.1
 

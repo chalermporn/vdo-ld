@@ -17,7 +17,36 @@ permissions:
   contents: write   # ต้องมีเพื่อให้ tauri-action / gh สร้าง release ได้
 
 jobs:
+  # เช็คก่อน build: tag ต้องมี section ตรงกันใน CHANGELOG.md (กันลืมเปลี่ยน header)
+  # fail ที่นี่ = ไม่เปลือง build ทุก OS, และโชว์ error annotation ในหน้า Actions
+  changelog-check:
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: ตรวจว่า CHANGELOG มี section ของ tag นี้
+        shell: bash
+        run: |
+          ver="${GITHUB_REF_NAME#v}"   # v0.1.1 → 0.1.1
+          section=$(awk -v ver="$ver" '
+            $0 ~ "^## \\[" ver "\\]" {flag=1; next}
+            flag && /^## / {exit}
+            flag && /^\[[^][]*\]:/ {exit}
+            flag {print}
+          ' CHANGELOG.md)
+          if [ -z "$(printf '%s' "$section" | tr -d '[:space:]')" ]; then
+            echo "::error::ไม่พบ section '## [$ver]' (หรือว่างเปล่า) ใน CHANGELOG.md — release ถูกยกเลิก"
+            echo "หัวข้อที่มีตอนนี้ใน CHANGELOG.md:"
+            grep -n '^## ' CHANGELOG.md || true
+            echo "→ แก้: เปลี่ยน '## [Unreleased] / v$ver' เป็น '## [$ver] - <วันที่>' แล้ว push tag ใหม่"
+            exit 1
+          fi
+          echo "✅ พบ section [$ver] ใน CHANGELOG.md — ไปต่อ build ได้"
+
   build:
+    needs: changelog-check
+    # ผ่านเมื่อ check สำเร็จ (tag) หรือถูก skip (dispatch ไม่ใช่ tag); หยุดเฉพาะตอน check fail
+    if: ${{ !cancelled() && needs.changelog-check.result != 'failure' }}
     strategy:
       fail-fast: false
       matrix:
