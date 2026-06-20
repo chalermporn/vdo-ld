@@ -1,0 +1,143 @@
+# Build + deploy ครบทุก OS บน GitHub Actions
+#
+#   - push tag ขึ้นต้น v* (เช่น v0.1.0)  → build ทุกแพลตฟอร์มแล้วสร้าง GitHub Release เดียว
+#                                          แนบตัวติดตั้ง GUI (.dmg/.AppImage/.deb/.msi/-setup.exe)
+#                                          + CLI binary ของแต่ละ OS/arch
+#   - กดรันเอง (workflow_dispatch)         → build อย่างเดียว เก็บเป็น artifact ให้โหลดทดสอบ
+#
+# build บน runner จริงของแต่ละ OS (cross-build GUI ข้าม OS ยุ่ง — build native ตรงนั้นเลย).
+name: Release (all OS)
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write   # ต้องมีเพื่อให้ tauri-action / gh สร้าง release ได้
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS — Apple Silicon
+          - platform: macos-latest
+            rust-target: aarch64-apple-darwin
+            tauri-args: '--target aarch64-apple-darwin'
+            cli-asset: vdo-dl-macos-aarch64
+          # macOS — Intel
+          - platform: macos-latest
+            rust-target: x86_64-apple-darwin
+            tauri-args: '--target x86_64-apple-darwin'
+            cli-asset: vdo-dl-macos-x86_64
+          # Linux x86_64
+          - platform: ubuntu-22.04
+            rust-target: ''
+            tauri-args: ''
+            cli-asset: vdo-dl-linux-x86_64
+          # Windows x86_64
+          - platform: windows-latest
+            rust-target: ''
+            tauri-args: ''
+            cli-asset: vdo-dl-windows-x86_64.exe
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Linux: ระบบต้องมี webkit2gtk + เพื่อนถึงจะ build Tauri ได้
+      - name: ติดตั้ง deps (Linux)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            build-essential \
+            file
+
+      - name: ติดตั้ง Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-target }}
+
+      - name: cache build
+        uses: swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.platform }}-${{ matrix.rust-target }}
+
+      # CLI: native หรือ cross (mac มี 2 arch)
+      - name: build CLI
+        shell: bash
+        run: |
+          if [ -n "${{ matrix.rust-target }}" ]; then
+            cargo build --release --bin vdo-dl --target ${{ matrix.rust-target }}
+          else
+            cargo build --release --bin vdo-dl
+          fi
+
+      # GUI: tauri build → bundle ของแต่ละ OS (.dmg/.AppImage/.deb/.msi/.exe)
+      # frontendDist ชี้ ../ui (static ล้วน) จึงไม่ต้องลง node/bun
+      - name: build GUI + สร้าง release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # tag → ตั้งชื่อ release; dispatch (ไม่ใช่ tag) → ปล่อยว่าง = build เฉย ๆ ไม่สร้าง release
+          tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
+          releaseName: 'vdo-dl ${{ github.ref_name }}'
+          releaseBody: |
+            ## ตัวติดตั้ง / ไบนารี (เลือกตาม OS ด้านล่าง)
+
+            **GUI**
+            - macOS — `*.dmg` (Apple Silicon = `aarch64`, Intel = `x64`)
+            - Linux — `*.AppImage` หรือ `*.deb`
+            - Windows — `*-setup.exe` (NSIS) หรือ `*.msi`
+
+            **CLI** — `vdo-dl-<os>-<arch>` (วางที่ไหนก็รันได้)
+
+            ครั้งแรกที่รันจะโหลด yt-dlp + ffmpeg มาเก็บให้เอง (ต้องมีเน็ตครั้งแรก).
+            macOS/Windows ยังไม่ได้ code-sign — ระบบจะเตือน unknown publisher, กด allow/run anyway.
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.tauri-args }}
+
+      # เตรียม CLI binary + ตั้งชื่อให้มี os/arch กันชนกันใน release เดียว
+      - name: เตรียม CLI binary
+        shell: bash
+        run: |
+          mkdir -p dist
+          if [ -n "${{ matrix.rust-target }}" ]; then
+            base="target/${{ matrix.rust-target }}/release"
+          else
+            base="target/release"
+          fi
+          if [ -f "$base/vdo-dl.exe" ]; then
+            cp "$base/vdo-dl.exe" "dist/${{ matrix.cli-asset }}"
+          else
+            cp "$base/vdo-dl" "dist/${{ matrix.cli-asset }}"
+          fi
+
+      # แนบ CLI เข้า release เดียวกัน (tauri-action แนบให้แต่ตัว GUI)
+      - name: แนบ CLI เข้า release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.ref_name }}" "dist/${{ matrix.cli-asset }}" --clobber
+
+      # รันแบบ dispatch (ไม่มี release) → เก็บไฟล์เป็น artifact ให้โหลดทดสอบ
+      - name: เก็บ artifact (เวลารันเอง)
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.cli-asset }}
+          path: |
+            dist/*
+            target/**/release/bundle/**/*
+          if-no-files-found: warn

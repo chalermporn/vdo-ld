@@ -94,7 +94,19 @@ sqlite3 ~/VDO/.vdo-dl/index.db "SELECT title, uploader, source_url FROM download
 
 Env: `VDO_ROOT` (default `~/VDO`; บน Windows = `%USERPROFILE%\VDO`), `VDO_BIN`, `NO_COLOR`
 
-## Build
+## Release (อัตโนมัติทุก OS)
+push tag `v*` แล้ว GitHub Actions (`.github/workflows/release.yml`) จะ build บน runner จริงของแต่ละ OS
+แล้วสร้าง **GitHub Release เดียว** แนบให้ครบ:
+- GUI: macOS `.dmg` (Apple Silicon + Intel) · Linux `.AppImage`/`.deb` · Windows `*-setup.exe`/`.msi`
+- CLI: `vdo-dl-<os>-<arch>` ของทุกแพลตฟอร์ม
+
+```
+git tag -a v0.1.0 -m "..." && git push origin v0.1.0    # → release ใหม่เด้งเอง
+```
+> ยังไม่ได้ code-sign — macOS/Windows จะเตือน unknown publisher (กด allow/run anyway).
+> กดรัน workflow เองได้ (workflow_dispatch) เพื่อ build เก็บเป็น artifact โดยไม่ปล่อย release.
+
+## Build (เครื่องตัวเอง)
 
 ### เครื่องตัวเอง (mac/Linux/Windows native)
 ```
