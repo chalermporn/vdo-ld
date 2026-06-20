@@ -47,6 +47,10 @@ jobs:
     needs: changelog-check
     # ผ่านเมื่อ check สำเร็จ (tag) หรือถูก skip (dispatch ไม่ใช่ tag); หยุดเฉพาะตอน check fail
     if: ${{ !cancelled() && needs.changelog-check.result != 'failure' }}
+    # ยกขึ้น job-level เพื่อให้ใช้ใน step `if: env.WINDOWS_CERTIFICATE != ''` ได้ (gate การเซ็น)
+    env:
+      WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+      WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
     strategy:
       fail-fast: false
       matrix:
@@ -109,6 +113,36 @@ jobs:
           else
             cargo build --release --bin vdo-dl
           fi
+
+      # ── Windows code-sign (opt-in) ──
+      # มี secret WINDOWS_CERTIFICATE (.pfx base64) → import เข้า store + เอา thumbprint;
+      # ไม่มี secret → 2 step นี้ถูก skip, build แบบไม่เซ็นตามเดิม
+      - name: import Windows signing cert
+        if: matrix.platform == 'windows-latest' && env.WINDOWS_CERTIFICATE != ''
+        shell: pwsh
+        run: |
+          $pfx = "$env:RUNNER_TEMP\cert.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+          $pwd = ConvertTo-SecureString -String $env:WINDOWS_CERTIFICATE_PASSWORD -Force -AsPlainText
+          $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $pwd
+          "WINDOWS_CERT_THUMBPRINT=$($cert.Thumbprint)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Remove-Item $pfx
+          Write-Host "imported cert, thumbprint=$($cert.Thumbprint)"
+
+      - name: ใส่ thumbprint ลง tauri.conf.json
+        if: matrix.platform == 'windows-latest' && env.WINDOWS_CERT_THUMBPRINT != ''
+        shell: pwsh
+        run: |
+          $conf = "src-tauri/tauri.conf.json"
+          $json = Get-Content $conf -Raw | ConvertFrom-Json
+          if (-not ($json.bundle.PSObject.Properties.Name -contains 'windows')) {
+            $json.bundle | Add-Member -MemberType NoteProperty -Name 'windows' -Value ([PSCustomObject]@{})
+          }
+          $json.bundle.windows | Add-Member -MemberType NoteProperty -Name 'certificateThumbprint' -Value $env:WINDOWS_CERT_THUMBPRINT -Force
+          $json.bundle.windows | Add-Member -MemberType NoteProperty -Name 'digestAlgorithm' -Value 'sha256' -Force
+          $json.bundle.windows | Add-Member -MemberType NoteProperty -Name 'timestampUrl' -Value 'http://timestamp.digicert.com' -Force
+          $json | ConvertTo-Json -Depth 32 | Set-Content $conf -Encoding utf8
+          Write-Host "set certificateThumbprint in tauri.conf.json (sign ตอน tauri build)"
 
       # GUI: tauri build → bundle ของแต่ละ OS (.dmg/.AppImage/.deb/.msi/.exe)
       # frontendDist ชี้ ../ui (static ล้วน) จึงไม่ต้องลง node/bun
