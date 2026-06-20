@@ -631,6 +631,15 @@ function launch(url, title){
 let pvUrl='', pvTitle='';
 function closePreview(){ $('preview').classList.add('hidden'); }
 function pvConfirm(){ const u=pvUrl, t=pvTitle; closePreview(); if(u) launch(u, t); }
+// เด้ง box เปล่า ๆ ทันที (ก่อนอ่าน clipboard ที่ spawn pbpaste/powershell ช้า) — กัน gap
+function pvShell(){
+  pvUrl=''; pvTitle='';
+  $('pv-thumb').classList.add('hidden'); $('pv-thumb').removeAttribute('src');
+  $('pv-thumbph').classList.remove('hidden'); $('pv-thumbph').textContent='⟳';
+  $('pv-title').textContent='กำลังอ่านลิงก์…';
+  $('pv-meta').textContent=''; $('pv-url').textContent=''; $('pv-opts').textContent='';
+  $('preview').classList.remove('hidden');
+}
 async function showPreview(url, title){
   pvUrl=url; pvTitle=title||'';
   const o=curOpts();
@@ -702,10 +711,17 @@ async function startPlaylist(url, title){
 }
 
 async function pasteLink(){
-  let url='';
-  if(inTauri){ try{ url=await invoke('clipboard'); }catch(e){} }
-  if(smart && isUrl(url)){ return showPreview(url.trim(), ''); }
-  openComposer(isUrl(url)?url.trim():'');
+  if(!inTauri){ openComposer(''); return; }
+  if(smart){
+    pvShell();                                   // เด้ง popup ทันที แล้วค่อยอ่าน clipboard ข้างใน (ไม่มี gap)
+    let url=''; try{ url=await invoke('clipboard'); }catch(e){}
+    url=(url||'').trim();
+    if(isUrl(url)){ showPreview(url, ''); }       // เป็นลิงก์ → เติม url + ดึงข้อมูล
+    else { closePreview(); openComposer(''); }    // ไม่ใช่ลิงก์ → ปิด popup เปิดฟอร์มปกติ
+    return;
+  }
+  let url=''; try{ url=await invoke('clipboard'); }catch(e){}
+  openComposer(isUrl((url||'').trim())?(url||'').trim():'');
 }
 
 function openComposer(prefill){
