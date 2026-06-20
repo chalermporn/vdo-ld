@@ -23,6 +23,18 @@
 ### Fixed
 - _(แก้บั๊ก)_
 
+## [0.1.3] - 2026-06-21
+
+### Fixed
+- **GUI: ลูก playlist ขึ้น "ข้าม" ทั้งที่โหลดสำเร็จ** — คลิปเดี่ยวที่โหลดแบบเปิด "ทั้ง playlist"
+  ทำให้ yt-dlp คืน `playlist_index=NA` → index ว่าง → GUI map แถวลูกไม่เจอ → โดน mark ข้าม.
+  แก้ด้วย `childOf()` ที่ fallback ไปลูกตัวแรกที่ยังไม่เสร็จเมื่อ index ว่าง (yt-dlp ส่ง item ตามลำดับ).
+
+### Added
+- **ปุ่ม "เปิดต้นทาง" (↗) บนแถวที่โหลด** — ส่ง URL ต้นทาง (`webpage_url`) มากับ event
+  เก็บที่ row → กดเปิดลิงก์ที่โหลดมาในเบราว์เซอร์ได้เลย (รู้ว่าโหลดมาจากไหน).
+  _(provenance ยังบันทึก source_url + webpage_url ลง index ทุกครั้งเหมือนเดิม)._
+
 ## [0.1.2] - 2026-06-21
 
 ### Added
@@ -87,7 +99,8 @@
 - ไม่รองรับเนื้อหา DRM/auth-bypass (เช่น Udemy Business — โหลดไม่ได้ถาวร).
 - เครื่องที่ไม่มี `sqlite3` → ข้าม index เงียบ ๆ (best-effort) ไม่กระทบการโหลด.
 
-[Unreleased]: https://github.com/chalermporn/vdo-ld/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/chalermporn/vdo-ld/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/chalermporn/vdo-ld/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/chalermporn/vdo-ld/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/chalermporn/vdo-ld/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/chalermporn/vdo-ld/releases/tag/v0.1.0
