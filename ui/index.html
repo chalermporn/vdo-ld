@@ -86,7 +86,7 @@
     <button onclick="pasteLink()" class="btn-green text-white font-semibold text-[13px] rounded-lg pl-3 pr-4 py-2 flex items-center gap-2">
       <i data-lucide="clipboard-paste" style="color:#fff"></i> วางลิงก์
     </button>
-    <button id="smart" onclick="toggleSmart()" title="Smart Mode — วางลิงก์แล้วโหลดทันที"
+    <button id="smart" onclick="toggleSmart()" title="Smart Mode — วางลิงก์แล้วเด้งพรีวิวให้ยืนยันก่อนโหลด (ปิด = กรอกฟอร์มเอง)"
       class="grid place-items-center w-9 h-9 rounded-lg border line pill shrink-0"><i data-lucide="lightbulb"></i></button>
 
     <div class="h-6 w-px hidden sm:block" style="background:var(--line)"></div>
@@ -295,6 +295,31 @@
       <p id="modal-title" class="ink font-semibold text-sm">ลบรายการนี้?</p>
       <p id="modal-sub" class="muted text-xs mt-1 truncate"></p>
       <div id="modal-actions" class="flex flex-col gap-2 mt-4"></div>
+    </div>
+  </div>
+
+  <!-- พรีวิวก่อนโหลด: วางลิงก์ → เด้งมาบอกว่ากำลังจะโหลดอะไร แล้วค่อยกดยืนยัน -->
+  <div id="preview" class="hidden fixed inset-0 z-50 grid place-items-center p-4 modal-back">
+    <div class="panel border line rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+      <div class="p-4">
+        <p class="muted text-xs mb-2">กำลังจะโหลด — ตรวจสอบก่อนนะ</p>
+        <div class="flex gap-3">
+          <div class="shrink-0 rounded-lg overflow-hidden bg-black/10 border line" style="width:124px;height:70px">
+            <img id="pv-thumb" class="w-full h-full object-cover hidden" alt="">
+            <div id="pv-thumbph" class="w-full h-full grid place-items-center muted text-lg">⟳</div>
+          </div>
+          <div class="min-w-0 flex-1">
+            <p id="pv-title" class="ink font-semibold text-sm leading-snug line-clamp-2">กำลังดึงข้อมูล…</p>
+            <p id="pv-meta" class="muted text-xs mt-1"></p>
+            <p id="pv-url" class="muted text-[11px] mt-1 truncate"></p>
+          </div>
+        </div>
+        <p id="pv-opts" class="muted text-xs mt-3"></p>
+      </div>
+      <div class="flex gap-2 p-3 border-t line" style="background:var(--field)">
+        <button id="pv-go" onclick="pvConfirm()" class="flex-1 rounded-lg px-3 py-2 text-[13px] font-semibold text-white" style="background:var(--green-d)">โหลดเลย</button>
+        <button onclick="closePreview()" class="rounded-lg px-3 py-2 text-[13px] font-semibold border line ink" style="background:var(--field)">ยกเลิก</button>
+      </div>
     </div>
   </div>
 </div>
@@ -602,6 +627,43 @@ function launch(url, title){
   return $('plist').checked ? startPlaylist(url, title) : startDownload(url, title);
 }
 
+// พรีวิวก่อนโหลด: เด้ง popup ดึง (ชื่อ/ผู้ลง/ความยาว/รูป) มาให้ดู แล้วค่อยกดยืนยัน
+let pvUrl='', pvTitle='';
+function closePreview(){ $('preview').classList.add('hidden'); }
+function pvConfirm(){ const u=pvUrl, t=pvTitle; closePreview(); if(u) launch(u, t); }
+async function showPreview(url, title){
+  pvUrl=url; pvTitle=title||'';
+  const o=curOpts();
+  $('pv-thumb').classList.add('hidden'); $('pv-thumb').removeAttribute('src');
+  $('pv-thumbph').classList.remove('hidden'); $('pv-thumbph').textContent='⟳';
+  $('pv-title').textContent='กำลังดึงข้อมูล…';
+  $('pv-meta').textContent=''; $('pv-url').textContent=url;
+  $('pv-opts').textContent='จะโหลดเป็น: '+(o.audio?('เสียง · '+o.audioFmt.toUpperCase())
+      :('วิดีโอ'+(o.maxHeight?(' ≤'+o.maxHeight+'p'):' คุณภาพสูงสุด')))
+      +' · หมวด '+o.cat+($('plist').checked?' · ทั้ง playlist':'');
+  $('preview').classList.remove('hidden');
+  if(!inTauri){ $('pv-title').textContent='(เดโม) เปิดในแอปจริงเพื่อดึงข้อมูล'; $('pv-thumbph').textContent='🎬'; return; }
+  try{
+    const m=await invoke('probe_meta',{url, ...cookieArgs()});
+    if($('preview').classList.contains('hidden')) return; // ผู้ใช้ปิดไปก่อนแล้ว
+    if(m){
+      if(m.title){ $('pv-title').textContent=m.title; if(!pvTitle) pvTitle=m.title; }
+      const bits=[]; if(m.uploader) bits.push(m.uploader); if(m.duration) bits.push('⏱ '+m.duration);
+      $('pv-meta').textContent=bits.join('  ·  ');
+      if(m.thumbnail){ const im=$('pv-thumb');
+        im.onload=()=>{ im.classList.remove('hidden'); $('pv-thumbph').classList.add('hidden'); };
+        im.onerror=()=>{ $('pv-thumbph').textContent='🎬'; };
+        im.src=m.thumbnail;
+      } else { $('pv-thumbph').textContent='🎬'; }
+    }
+  }catch(e){
+    if($('preview').classList.contains('hidden')) return;
+    $('pv-title').textContent='ดึงข้อมูลไม่ได้ — ยังกด "โหลดเลย" ต่อได้';
+    $('pv-meta').textContent=String(e?.message||e);
+    $('pv-thumbph').textContent='⚠';
+  }
+}
+
 async function startPlaylist(url, title){
   const o = curOpts();
   const pid = uid++;
@@ -642,7 +704,7 @@ async function startPlaylist(url, title){
 async function pasteLink(){
   let url='';
   if(inTauri){ try{ url=await invoke('clipboard'); }catch(e){} }
-  if(smart && isUrl(url)){ return launch(url.trim(), ''); }
+  if(smart && isUrl(url)){ return showPreview(url.trim(), ''); }
   openComposer(isUrl(url)?url.trim():'');
 }
 
@@ -808,11 +870,13 @@ async function init(){
   drop.addEventListener('dragleave',e=>{ if(e.target===drop) drop.classList.remove('drag'); });
   drop.addEventListener('drop',e=>{ e.preventDefault(); drop.classList.remove('drag');
     const txt=(e.dataTransfer.getData('text/uri-list')||e.dataTransfer.getData('text/plain')||'').trim();
-    if(isUrl(txt)){ smart ? launch(txt,'') : openComposer(txt); } });
+    if(isUrl(txt)){ smart ? showPreview(txt,'') : openComposer(txt); } });
   $('modal').addEventListener('click',e=>{ if(e.target===$('modal')) closeModal(); });
   $('settings').addEventListener('click',e=>{ if(e.target===$('settings')) closeSettings(); });
+  $('preview').addEventListener('click',e=>{ if(e.target===$('preview')) closePreview(); });
   document.addEventListener('keydown',e=>{ if(e.key==='Escape'){
-    if(!$('settings').classList.contains('hidden')) closeSettings();
+    if(!$('preview').classList.contains('hidden')) closePreview();
+    else if(!$('settings').classList.contains('hidden')) closeSettings();
     else if(!$('modal').classList.contains('hidden')) closeModal();
   }});
 

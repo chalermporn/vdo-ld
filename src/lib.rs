@@ -1166,24 +1166,37 @@ pub fn update(log: &Log) -> VResult<()> {
 }
 
 // ---------- meta / OS helpers ----------
-/// ดึง (ชื่อเรื่อง, URL รูป thumbnail) จาก URL โดยไม่โหลดวิดีโอ
-pub fn probe_meta(url: &str, cookies: &Cookies) -> VResult<(String, String)> {
+/// ดึง (ชื่อเรื่อง, ผู้ลง, ความยาว, URL รูป thumbnail) จาก URL โดยไม่โหลดวิดีโอ — ใช้ตอนพรีวิว
+/// ลำดับ --print ต้องตรงกับลำดับที่อ่านออกมาด้านล่าง (4 บรรทัด). "NA"/ว่าง → "" ผ่าน na()
+pub fn probe_meta(url: &str, cookies: &Cookies) -> VResult<(String, String, String, String)> {
     let yt = find_tool("yt-dlp", "--version").ok_or("ยังไม่มี yt-dlp")?;
     let mut cmd = Command::new(yt);
     prepend_tool_path(&mut cmd);
     cmd.args(["--skip-download", "--no-warnings", "--no-playlist"])
-        .args(["--print", "%(title)s", "--print", "%(thumbnail)s"])
+        .args([
+            "--print",
+            "%(title)s",
+            "--print",
+            "%(uploader)s",
+            "--print",
+            "%(duration_string)s",
+            "--print",
+            "%(thumbnail)s",
+        ])
         .args(cookie_args(cookies))
         .arg(url);
     let out = cmd.output().map_err(|e| format!("รัน yt-dlp ไม่ได้: {}", e))?;
     let text = String::from_utf8_lossy(&out.stdout);
-    let mut lines = text.lines().filter(|l| !l.trim().is_empty());
-    let title = lines.next().unwrap_or("").trim().to_string();
-    let thumb = lines.next().unwrap_or("").trim().to_string();
+    // yt-dlp พิมพ์ 4 บรรทัดตามลำดับ --print — อ่านตามตำแหน่ง ไม่กรองบรรทัดว่าง (กันเลื่อน field)
+    let mut lines = text.lines();
+    let title = na(lines.next().map(|s| s.trim()));
+    let uploader = na(lines.next().map(|s| s.trim()));
+    let duration = na(lines.next().map(|s| s.trim()));
+    let thumb = na(lines.next().map(|s| s.trim()));
     if title.is_empty() {
         return Err("ดึงข้อมูลวิดีโอไม่ได้ (URL ใช้ไม่ได้?)".into());
     }
-    Ok((title, thumb))
+    Ok((title, uploader, duration, thumb))
 }
 
 /// ลบไฟล์ในดิสก์ (เฉพาะที่อยู่ใต้ ~/VDO เพื่อกันลบผิด)

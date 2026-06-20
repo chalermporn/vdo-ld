@@ -55,6 +55,8 @@ struct DownloadResult {
 #[derive(Clone, Serialize)]
 struct Meta {
     title: String,
+    uploader: String,
+    duration: String,
     thumbnail: String,
 }
 
@@ -84,8 +86,9 @@ fn probe_meta(
     cookies_browser: Option<String>,
     cookies_file: Option<String>,
 ) -> Result<Meta, String> {
-    let (title, thumbnail) = core::probe_meta(&url, &core::Cookies::from(cookies_browser, cookies_file))?;
-    Ok(Meta { title, thumbnail })
+    let (title, uploader, duration, thumbnail) =
+        core::probe_meta(&url, &core::Cookies::from(cookies_browser, cookies_file))?;
+    Ok(Meta { title, uploader, duration, thumbnail })
 }
 
 /// ดึงข้อมูล playlist (ชื่อ + รายชื่อคลิป) เพื่อ pre-create แถวลูก (Option B)
