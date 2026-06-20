@@ -1,5 +1,11 @@
 # vdo-dl
 
+[![latest release](https://img.shields.io/github/v/release/chalermporn/vdo-ld?sort=semver&label=release)](https://github.com/chalermporn/vdo-ld/releases/latest)
+[![downloads](https://img.shields.io/github/downloads/chalermporn/vdo-ld/total?label=downloads)](https://github.com/chalermporn/vdo-ld/releases)
+[![platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux%20%7C%20Windows-blue)](https://github.com/chalermporn/vdo-ld/releases/latest)
+
+> ⬇️ โหลดตัวติดตั้ง/ไบนารีล่าสุดได้ที่ [**Releases**](https://github.com/chalermporn/vdo-ld/releases/latest) — มีครบทุก OS.
+
 พอร์ตของ `~/.claude/skills/vdo-archive/scripts/vdo` มาเป็น Rust binary ตัวเดียว —
 build ลง macOS / Linux / **Windows** ได้ เป็น **zero-dependency** (ไม่มี crate ภายนอก).
 
