@@ -116,6 +116,16 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # ── macOS code-sign + notarize ──
+          # ถ้ายังไม่ได้ตั้ง secrets เหล่านี้ ค่าจะเป็นค่าว่าง → tauri sign แบบ adhoc ตามเดิม (build ไม่พัง)
+          # ตั้งครบเมื่อไหร่ (มี Apple Developer ID) → sign + notarize อัตโนมัติ, ผู้ใช้ไม่ต้อง xattr
+          # วิธีเอาค่า: ดู README หัวข้อ "macOS notarization (CI)"
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}                   # .p12 (Developer ID Application) → base64
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }} # รหัสตอน export .p12
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}         # "Developer ID Application: ชื่อ (TEAMID)"
+          APPLE_ID: ${{ secrets.APPLE_ID }}                                     # Apple ID email
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}                         # app-specific password (ไม่ใช่รหัส Apple ID จริง)
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}                           # Team ID 10 หลัก
         with:
           # tag → ตั้งชื่อ release; dispatch (ไม่ใช่ tag) → ปล่อยว่าง = build เฉย ๆ ไม่สร้าง release
           tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
