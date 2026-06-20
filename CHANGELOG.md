@@ -65,7 +65,7 @@
   `*-setup.exe`/`.msi`) + CLI ของทุก os/arch.
 
 ### Known limitations
-- ยังไม่ได้ code-sign — macOS/Windows เตือน unknown publisher (mac: right-click → Open; Win: Run anyway).
+- ยังไม่ได้ code-sign — macOS ขึ้น "is damaged" (แก้: `xattr -dr com.apple.quarantine <app>`); Windows SmartScreen เตือน (Run anyway).
 - ไม่รองรับเนื้อหา DRM/auth-bypass (เช่น Udemy Business — โหลดไม่ได้ถาวร).
 - เครื่องที่ไม่มี `sqlite3` → ข้าม index เงียบ ๆ (best-effort) ไม่กระทบการโหลด.
 

@@ -206,7 +206,9 @@ jobs:
           **CLI** — `vdo-dl-<os>-<arch>` (วางที่ไหนก็รันได้)
 
           ครั้งแรกที่รันจะโหลด yt-dlp + ffmpeg ให้เอง (ต้องมีเน็ตครั้งแรก).
-          macOS/Windows ยังไม่ได้ code-sign — mac: right-click → Open · Windows: Run anyway.
+          ยังไม่ได้ code-sign:
+          - **macOS** ขึ้น "is damaged" → `xattr -dr com.apple.quarantine /Applications/vdo-dl.app` แล้วเปิดใหม่
+          - **Windows** SmartScreen เตือน → More info → Run anyway
           FOOTER
           } > RELEASE_NOTES.md
           echo "----- RELEASE_NOTES.md -----"

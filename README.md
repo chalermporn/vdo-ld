@@ -29,6 +29,19 @@ bunx @tauri-apps/cli@2 build    # release: ได้ .app (mac) / .exe+installer
 > Windows: cross-build GUI จาก mac ยุ่ง — แนะนำ build บน Windows runner (GitHub Actions).
 > ตัว CLI (`vdo-dl`) ยัง cross-build ไป `.exe` จาก mac ได้ปกติ (ดูล่าง).
 
+### ⚠️ macOS เปิดครั้งแรกขึ้น "is damaged and can't be opened"
+ไม่ใช่ไฟล์เสีย — แอป**ยังไม่ได้ notarize กับ Apple** พอโหลดผ่านเบราว์เซอร์ไฟล์ติด flag `com.apple.quarantine`
+macOS เลยบล็อกแล้วขึ้นข้อความหลอกว่า "damaged". ลบ quarantine แล้วเปิดได้ทันที:
+```bash
+# GUI (.app) — ลากเข้า /Applications ก่อน แล้ว:
+xattr -dr com.apple.quarantine /Applications/vdo-dl.app
+open /Applications/vdo-dl.app
+
+# CLI binary:
+xattr -dr com.apple.quarantine ~/Downloads/vdo-dl-macos-aarch64 && chmod +x ~/Downloads/vdo-dl-macos-aarch64
+```
+จะหายถาวร (ไม่ต้องทำขั้นนี้) ต่อเมื่อเซ็นด้วย **Apple Developer ID + notarize** — ต้องมีบัญชี Apple Developer ($99/ปี).
+
 ตัว `vdo-dl` ทำหน้าที่สั่งงาน `yt-dlp` + `ffmpeg`:
 โหลดคุณภาพสูงสุด (`bv*+ba/b`) → merge mp4 แบบ `-c copy` (ไม่ re-encode) →
 verify ด้วย ffprobe → จัดเข้า `~/VDO/<หมวด>/`.
