@@ -23,6 +23,24 @@
 ### Fixed
 - _(แก้บั๊ก)_
 
+## [0.1.2] - 2026-06-21
+
+### Added
+- **GUI: พรีวิวก่อนโหลด** — วางลิงก์ (หรือลากมาวาง) ในโหมด Smart → เด้ง popup แสดง
+  **ชื่อ / ผู้ลง / ความยาว / thumbnail** + ตัวเลือกที่จะใช้ (วิดีโอ/เสียง·คุณภาพ·หมวด)
+  ให้ตรวจก่อนกด "โหลดเลย". `probe_meta` ดึงเพิ่ม uploader + duration.
+- **CI scaffold เซ็นโค้ด (opt-in via secrets)** — macOS notarize (`APPLE_*`) และ
+  Windows code-sign (`WINDOWS_CERTIFICATE*`); ไม่มี secrets ก็ build แบบไม่เซ็นตามเดิม.
+- README badges (release / downloads / platforms).
+
+### Changed
+- popup พรีวิวเด้ง **ทันที** ตอนกดวางลิงก์ — อ่าน clipboard (`pbpaste`/`powershell`)
+  + ดึงข้อมูลข้างใน popup แทนที่จะรอก่อนเด้ง (เดิมมี gap จากการ spawn process).
+- Smart Mode: จาก "วางแล้วโหลดทันที" → "วางแล้วเด้งพรีวิวให้ยืนยัน".
+
+### Fixed
+- เอกสาร macOS "is damaged" — ใช้ `xattr -dr com.apple.quarantine` (right-click→Open แก้เคสนี้ไม่ได้).
+
 ## [0.1.1] - 2026-06-20
 
 ปรับเฉพาะ **release tooling / เอกสาร** — ตัวโปรแกรม (CLI + GUI binary) **เหมือน v0.1.0 ทุกประการ**
@@ -69,6 +87,7 @@
 - ไม่รองรับเนื้อหา DRM/auth-bypass (เช่น Udemy Business — โหลดไม่ได้ถาวร).
 - เครื่องที่ไม่มี `sqlite3` → ข้าม index เงียบ ๆ (best-effort) ไม่กระทบการโหลด.
 
-[Unreleased]: https://github.com/chalermporn/vdo-ld/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/chalermporn/vdo-ld/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/chalermporn/vdo-ld/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/chalermporn/vdo-ld/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/chalermporn/vdo-ld/releases/tag/v0.1.0
