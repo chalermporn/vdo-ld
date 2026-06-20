@@ -4,6 +4,7 @@
 build ลง macOS / Linux / **Windows** ได้ เป็น **zero-dependency** (ไม่มี crate ภายนอก).
 
 มาพร้อม **GUI (Tauri)** โทน [codemunha.com](https://codemunha.com) ที่เรียก core เดียวกับ CLI.
+ทุกครั้งที่โหลดยัง **จดประวัติ (source URL + metadata) ลง SQLite** ให้ค้นย้อนหลังได้ทั้ง CLI และ GUI.
 
 ## โครงสร้าง
 ```
@@ -42,23 +43,56 @@ PATH แล้ว (เช่น `brew install` บน mac) ก็ใช้ตั
 ## Usage (CLI)
 
 ```
-vdo-dl [--audio] [--quality N] <URL> ["ชื่อเรื่อง"] ["หมวด"]
+vdo-dl [options] <URL> ["ชื่อเรื่อง"] ["หมวด"]
 vdo-dl -F <URL>                   ดูตาราง format ที่มี (ไม่โหลด)
 vdo-dl update                     อัปเดต yt-dlp (+ ffmpeg บน Windows)
+vdo-dl search ["คำค้น"]            ค้นประวัติที่เคยโหลด (ไม่ใส่คำ = ล่าสุด)
+vdo-dl backfill                   สแกนไฟล์เก่าใน ~/VDO/ เข้า index
 
 # ตัวอย่าง
-vdo-dl <URL> "ชื่อ" "หมวด"          วิดีโอคุณภาพสูงสุด → ~/VDO/<หมวด>/ชื่อ.mp4
-vdo-dl --audio <URL> "ชื่อ" "เพลง"  เสียงอย่างเดียว → .mp3
-vdo-dl --quality 720 <URL> "ชื่อ"   จำกัด ≤720p
+vdo-dl <URL> "ชื่อ" "หมวด"                       วิดีโอคุณภาพสูงสุด → ~/VDO/<หมวด>/ชื่อ.mp4
+vdo-dl --audio <URL> "ชื่อ" "เพลง"               เสียงอย่างเดียว → .mp3
+vdo-dl --quality 720 <URL> "ชื่อ"                จำกัด ≤720p
+vdo-dl --playlist <URL> "" "คอร์ส"               ทั้ง playlist → โฟลเดอร์ย่อย + .m3u
+vdo-dl --cookies-from-browser chrome <URL> "ชื่อ" "หมวด"   เนื้อหาที่ต้องล็อกอิน
 ```
+
+### Options
+
+| Option | ความหมาย |
+|--------|----------|
+| `--audio` | โหลดเสียงอย่างเดียว |
+| `--quality N` | จำกัดความสูงสูงสุด เช่น `1080`, `720` (ไม่ใส่ = สูงสุด) |
+| `--mkv` | วิดีโอ: merge เป็น `.mkv` (default `.mp4`) |
+| `--audio-format FMT` | เสียง: `mp3` \| `m4a` \| `ogg` (default `mp3`) |
+| `--audio-quality N` | เสียง: `0` (ดีสุด) .. `10` |
+| `--subs[=LANGS]` | ดาวน์โหลด + ฝังคำบรรยาย (ไม่ระบุ = `en,th`) |
+| `--playlist` | โหลดทั้ง playlist → โฟลเดอร์ย่อย + `.m3u` |
+| `--wait-for-video[=N]` | รอไลฟ์/พรีเมียร์ให้เริ่มก่อน (poll ทุก N วิ, default 60) |
+| `--cookies-from-browser B` | ใช้คุกกี้จากเบราว์เซอร์ (`chrome`\|`safari`\|`firefox`\|`edge`\|`brave`\|…) |
+| `--cookies FILE` | ใช้คุกกี้จากไฟล์ `cookies.txt` (Netscape) |
 
 ## GUI features
 วางลิงก์ (อ่าน clipboard) · Smart Mode (วาง=โหลดทันที) · เลือกวิดีโอ/เสียง + คุณภาพ ·
-แท็บ ทั้งหมด/วิดีโอ/เสียง · progress แยกต่อรายการ (โหลดพร้อมกันได้) · หยุด/ลองใหม่ ·
+แท็บ ทั้งหมด/วิดีโอ/เสียง/**ประวัติ** · progress แยกต่อรายการ (โหลดพร้อมกันได้) · หยุด/ลองใหม่ ·
 เปิดโฟลเดอร์เมื่อเสร็จ · ดึงชื่อ+thumbnail อัตโนมัติ · จำรายการข้ามการเปิด/ปิด · ลากลิงก์มาวาง ·
-dark/light · อัปเดตเครื่องมือในตั้งค่า
+คุกกี้ (เบราว์เซอร์/ไฟล์) · dark/light · อัปเดตเครื่องมือในตั้งค่า
 
-Env: `VDO_ROOT` (default `~/VDO`; บน Windows = `%USERPROFILE%\VDO`), `NO_COLOR`
+**แท็บ ประวัติ** — ค้นจากชื่อ/ผู้ลง/หมวด/URL/แหล่งที่มา; แต่ละรายการกด เปิดต้นทาง (เบราว์เซอร์) ·
+เปิดโฟลเดอร์ · ลบ (ลบไฟล์+ประวัติ หรือเอาออกจากประวัติเท่านั้น)
+
+## ประวัติ / ค้นหา
+ทุกครั้งที่โหลดสำเร็จ บันทึก source URL + metadata (ชื่อ, ผู้ลง, วันอัปโหลด, ความยาว, แหล่งที่มา,
+ความละเอียด, ขนาด ฯลฯ) ลง DB กลางที่ `~/VDO/.vdo-dl/index.db` (SQLite). ใช้ `sqlite3` ที่มากับ OS
+(เหมือนวิธีเรียก yt-dlp/ffmpeg) — core ยัง **zero-dependency**. ค้นได้ทั้งในแอป, ด้วย `vdo-dl search`,
+หรือ SQL ตรง ๆ:
+```
+sqlite3 ~/VDO/.vdo-dl/index.db "SELECT title, uploader, source_url FROM downloads WHERE title LIKE '%react%';"
+```
+- ของเก่าที่โหลดก่อนมีฟีเจอร์นี้ → `vdo-dl backfill` ดึงเข้า index ได้ (แต่ source URL ของเก่ากู้ไม่ได้ — ไม่เคยเก็บ).
+- **best-effort**: เครื่องไม่มี `sqlite3` (เช่น Windows ที่ไม่มี builtin) จะข้าม index เงียบ ๆ ไม่กระทบการโหลด.
+
+Env: `VDO_ROOT` (default `~/VDO`; บน Windows = `%USERPROFILE%\VDO`), `VDO_BIN`, `NO_COLOR`
 
 ## Build
 
