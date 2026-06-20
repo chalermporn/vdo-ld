@@ -10,9 +10,9 @@
 > ⚠️ ถ้า tag `vX.Y.Z` ทั้งที่ยังไม่มีหัวข้อ `## [X.Y.Z]` ตรงกัน → workflow (`changelog-check`) จะ **fail ก่อน build**
 > เพื่อกันลืมเปลี่ยน header. แก้หัวข้อให้ตรงแล้ว push tag ใหม่.
 
-## [Unreleased] / v0.1.1
+## [Unreleased]
 
-ยังไม่มีการเปลี่ยนแปลงหลัง v0.1.0 — เติมรายการใหม่ที่นี่ระหว่างพัฒนา.
+เติมรายการใหม่ที่นี่ระหว่างพัฒนา.
 
 ### Added
 - _(ของใหม่)_
@@ -22,6 +22,18 @@
 
 ### Fixed
 - _(แก้บั๊ก)_
+
+## [0.1.1] - 2026-06-20
+
+ปรับเฉพาะ **release tooling / เอกสาร** — ตัวโปรแกรม (CLI + GUI binary) **เหมือน v0.1.0 ทุกประการ**
+(ไม่มีการแก้ `src/`), ไม่ต้องอัปเดตถ้าใช้ v0.1.0 อยู่แล้ว.
+
+### Added
+- **`CHANGELOG.md`** (รูปแบบ Keep a Changelog) — บันทึกการเปลี่ยนแปลงรายเวอร์ชัน.
+- **release notes อัตโนมัติจาก CHANGELOG** — job `notes` ดึง section `## [X.Y.Z]` มาเป็น body ของ
+  GitHub Release (ต่อท้ายด้วยวิธีติดตั้ง/asset legend) แทนข้อความ fix ไว้.
+- **`changelog-check`** — job ตรวจก่อน build: ถ้า tag ไม่มี section ตรงกันใน CHANGELOG จะ
+  **fail ก่อน build** (กันลืมเปลี่ยน header, ไม่เปลือง build ทุก OS) พร้อม error annotation บอกวิธีแก้.
 
 ## [0.1.0] - 2026-06-20
 
@@ -57,5 +69,6 @@
 - ไม่รองรับเนื้อหา DRM/auth-bypass (เช่น Udemy Business — โหลดไม่ได้ถาวร).
 - เครื่องที่ไม่มี `sqlite3` → ข้าม index เงียบ ๆ (best-effort) ไม่กระทบการโหลด.
 
-[Unreleased]: https://github.com/chalermporn/vdo-ld/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/chalermporn/vdo-ld/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/chalermporn/vdo-ld/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/chalermporn/vdo-ld/releases/tag/v0.1.0
