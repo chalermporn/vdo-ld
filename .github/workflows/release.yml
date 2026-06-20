@@ -141,3 +141,50 @@ jobs:
             dist/*
             target/**/release/bundle/**/*
           if-no-files-found: warn
+
+  # ตั้ง release notes จาก CHANGELOG.md (รันทีเดียวหลัง build ครบทุก OS → กัน job แย่งเขียน body)
+  notes:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ดึง section ของเวอร์ชันจาก CHANGELOG + ต่อท้ายวิธีติดตั้ง
+        shell: bash
+        run: |
+          ver="${GITHUB_REF_NAME#v}"   # v0.1.1 → 0.1.1
+          # เอาบรรทัดใต้ "## [<ver>]" จนถึงหัวข้อ "## " ถัดไป (หรือ link-def "[x]:" ท้ายไฟล์)
+          section=$(awk -v ver="$ver" '
+            $0 ~ "^## \\[" ver "\\]" {flag=1; next}
+            flag && /^## / {exit}
+            flag && /^\[[^][]*\]:/ {exit}
+            flag {print}
+          ' CHANGELOG.md)
+          # ตัดบรรทัดว่างหัว/ท้าย
+          section=$(printf '%s\n' "$section" | sed -e '/./,$!d' | tac | sed -e '/./,$!d' | tac)
+          {
+            if [ -n "$section" ]; then
+              printf '%s\n\n' "$section"
+            else
+              echo "_(ไม่มี section \`$ver\` ใน CHANGELOG.md)_"
+              echo
+            fi
+            cat <<'FOOTER'
+          ---
+          ## ดาวน์โหลด
+          **GUI** — macOS `*.dmg` (Apple Silicon=`aarch64`, Intel=`x64`) · Linux `*.AppImage`/`*.deb`/`*.rpm` · Windows `*-setup.exe`/`*.msi`
+          **CLI** — `vdo-dl-<os>-<arch>` (วางที่ไหนก็รันได้)
+
+          ครั้งแรกที่รันจะโหลด yt-dlp + ffmpeg ให้เอง (ต้องมีเน็ตครั้งแรก).
+          macOS/Windows ยังไม่ได้ code-sign — mac: right-click → Open · Windows: Run anyway.
+          FOOTER
+          } > RELEASE_NOTES.md
+          echo "----- RELEASE_NOTES.md -----"
+          cat RELEASE_NOTES.md
+
+      - name: เขียน notes เข้า release
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "${GITHUB_REF_NAME}" --notes-file RELEASE_NOTES.md
