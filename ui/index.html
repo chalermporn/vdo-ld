@@ -395,6 +395,7 @@ function rowHtml(r){
   if(showBar){
     actions=`<button onclick="cancel(${r.id})" class="pill grid place-items-center w-8 h-8 rounded-lg" title="หยุด"><i data-lucide="x"></i></button>`;
   }else{
+    if(r.url) actions+=`<button onclick="openSrc(${r.id})" class="pill grid place-items-center w-8 h-8 rounded-lg" title="เปิดต้นทาง"><i data-lucide="external-link"></i></button>`;
     if(r.state==='done') actions+=`<button onclick="reveal(${r.id})" class="pill grid place-items-center w-8 h-8 rounded-lg" title="เปิดโฟลเดอร์"><i data-lucide="folder-open"></i></button>`;
     if(r.state==='error'||r.state==='cancel') actions+=`<button onclick="retry(${r.id})" class="pill grid place-items-center w-8 h-8 rounded-lg" title="ลองใหม่"><i data-lucide="rotate-cw"></i></button>`;
     actions+=`<button onclick="askDelete(${r.id})" class="pill grid place-items-center w-8 h-8 rounded-lg" title="ลบ"><i data-lucide="trash-2"></i></button>`;
@@ -460,6 +461,7 @@ function childHtml(c){
     </div>` : '';
   const sub = c.state==='done' ? `${c.size||'—'} · ${c.res||''}` : (c.state==='skip'?(c.err||'ข้าม'):'');
   let actions='';
+  if(c.url) actions+=`<button onclick="openSrc(${c.id})" class="pill grid place-items-center w-8 h-8 rounded-lg" title="เปิดต้นทาง"><i data-lucide="external-link"></i></button>`;
   if(c.state==='done'&&c.path){
     actions+=`<button onclick="revealPath(${c.id})" class="pill grid place-items-center w-8 h-8 rounded-lg" title="เปิดโฟลเดอร์"><i data-lucide="folder-open"></i></button>`;
   }
@@ -755,6 +757,8 @@ async function cancel(id){ const r=rows.find(x=>x.id===id); if(!r)return;
   if(inTauri){ try{ await invoke('cancel_download',{id}); }catch(e){} } else { r.state='cancel'; render(); } }
 async function reveal(id){ const r=rows.find(x=>x.id===id); if(r?.path && inTauri){ try{ await invoke('reveal',{path:r.path}); }catch(e){ setStat('เปิดโฟลเดอร์ไม่ได้: '+e); } } }
 const revealPath = reveal; // group/child เปิดโฟลเดอร์ด้วย path ของแถวนั้น
+// เปิดลิงก์ต้นทางของแถวนั้น (รู้ว่าโหลดมาจากไหน)
+async function openSrc(id){ const r=rows.find(x=>x.id===id); if(r?.url && inTauri){ try{ await invoke('open_url',{url:r.url}); }catch(e){ setStat('เปิดต้นทางไม่ได้: '+(e?.message||e)); } } }
 function retry(id){ const r=rows.find(x=>x.id===id); if(!r)return;
   $('mode').value=r.kind==='audio'?'audio':'video';
   syncMode();
@@ -907,18 +911,27 @@ async function init(){
     const savedCat=localStorage.getItem(LS.cat); if(savedCat && [...sel.options].some(o=>o.value===savedCat)) sel.value=savedCat;
   }catch(e){ console.error(e); }
 
+  // หาแถวลูกของ playlist; ถ้า index ว่าง (yt-dlp ไม่ให้ playlist_index เช่นคลิปเดี่ยวในโหมด playlist)
+  // → ลูกตัวแรกที่ยังไม่เสร็จ (yt-dlp ส่ง item ตามลำดับ). กันบั๊กลูกขึ้น "ข้าม" ทั้งที่โหลดได้
+  function childOf(id, index){
+    let c = (index!=null) ? rows.find(x=>x.parentId===id && x.index===index) : null;
+    if(!c) c = rows.find(x=>x.parentId===id && (x.state==='queue'||x.state==='dl'));
+    return c;
+  }
   listen('vdo://progress', e=>{ const {id, index, pct}=e.payload;
-    if(index==null){ // คลิปเดี่ยว
-      const r=rows.find(x=>x.id===id); if(r && r.state==='dl' && pct>=0){ r.pct=pct; render(); }
-    }else{ // ลูกใน playlist — map ตาม (parentId,index)
-      const c=rows.find(x=>x.parentId===id && x.index===index);
-      if(c && c.state!=='done'){ c.state='dl'; if(pct>=0) c.pct=pct; render(); }
+    const top=rows.find(x=>x.id===id);
+    if(top && !top.isGroup){ // คลิปเดี่ยว (ไม่ใช่ playlist)
+      if(top.state==='dl' && pct>=0){ top.pct=pct; render(); }
+      return;
     }
+    const c=childOf(id, index); // ลูกใน playlist (รองรับ index ว่าง)
+    if(c && c.state!=='done'){ c.state='dl'; if(pct>=0) c.pct=pct; render(); }
   });
   // ลูก playlist โหลด+ย้ายเสร็จรายตัว
-  listen('vdo://item', e=>{ const {id, index, path, size, height}=e.payload;
-    const c=rows.find(x=>x.parentId===id && x.index===index);
-    if(c){ c.state='done'; c.pct=100; c.path=path; c.size=size; if(height && height!=='?') c.res=height+'p'; render(); }
+  listen('vdo://item', e=>{ const {id, index, path, size, height, url}=e.payload;
+    const c=childOf(id, index);
+    if(c){ c.state='done'; c.pct=100; c.path=path; c.size=size; if(url) c.url=url;
+      if(height && height!=='?') c.res=height+'p'; render(); }
   });
   listen('vdo://status', e=>{ const t=e.payload.text||''; setStat(t);
     const r=rows.find(x=>x.id===e.payload.id);

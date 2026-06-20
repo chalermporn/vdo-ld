@@ -38,6 +38,7 @@ struct ItemEvent {
     path: String,
     height: String,
     size: String,
+    url: String, // ลิงก์ต้นทางของคลิปนี้ (webpage_url; fallback = URL ที่วาง) — ให้ GUI รู้ว่ามาจากไหน
 }
 
 #[derive(Clone, Serialize)]
@@ -236,6 +237,11 @@ async fn download_video(
                                 dest.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default()
                             };
                             let _ = core::index_record(&url, index, &meta, &item_title, &category, &dest, &v);
+                            let src = if !meta.webpage_url.is_empty() {
+                                meta.webpage_url.clone()
+                            } else {
+                                url.clone()
+                            };
                             let _ = app.emit(
                                 "vdo://item",
                                 ItemEvent {
@@ -244,6 +250,7 @@ async fn download_video(
                                     path: dest.display().to_string(),
                                     height: v.height,
                                     size: core::human_size(v.size_bytes),
+                                    url: src,
                                 },
                             );
                             dests.lock().unwrap().push(dest);
