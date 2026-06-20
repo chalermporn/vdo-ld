@@ -47,10 +47,19 @@ jobs:
     needs: changelog-check
     # ผ่านเมื่อ check สำเร็จ (tag) หรือถูก skip (dispatch ไม่ใช่ tag); หยุดเฉพาะตอน check fail
     if: ${{ !cancelled() && needs.changelog-check.result != 'failure' }}
-    # ยกขึ้น job-level เพื่อให้ใช้ใน step `if: env.WINDOWS_CERTIFICATE != ''` ได้ (gate การเซ็น)
+    # ยกขึ้น job-level เพื่อให้ใช้ใน step `if: env.X != ''` ได้ (gate การเซ็น)
+    # หมายเหตุ: เก็บ Apple secrets ไว้ชื่อ *_SECRET — ถ้า set ชื่อจริง (APPLE_CERTIFICATE ฯลฯ)
+    # ทั้งที่ค่าว่าง tauri จะพยายาม `security import` cert เปล่าแล้ว build พัง. จึง export ชื่อจริง
+    # เฉพาะตอนมี cert จริง (ดู step "setup macOS signing")
     env:
       WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
       WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+      APPLE_CERTIFICATE_SECRET: ${{ secrets.APPLE_CERTIFICATE }}
+      APPLE_CERTIFICATE_PASSWORD_SECRET: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_SIGNING_IDENTITY_SECRET: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+      APPLE_ID_SECRET: ${{ secrets.APPLE_ID }}
+      APPLE_PASSWORD_SECRET: ${{ secrets.APPLE_PASSWORD }}
+      APPLE_TEAM_ID_SECRET: ${{ secrets.APPLE_TEAM_ID }}
     strategy:
       fail-fast: false
       matrix:
@@ -146,20 +155,28 @@ jobs:
 
       # GUI: tauri build → bundle ของแต่ละ OS (.dmg/.AppImage/.deb/.msi/.exe)
       # frontendDist ชี้ ../ui (static ล้วน) จึงไม่ต้องลง node/bun
+      # macOS sign + notarize — export ชื่อ env จริงให้ tauri เฉพาะตอน "มี cert จริง"
+      # (set ชื่อจริงทั้งที่ค่าว่าง = tauri import cert เปล่าแล้วพัง — ดู env block ด้านบน)
+      - name: setup macOS signing (ถ้ามี secret)
+        if: matrix.platform == 'macos-latest' && env.APPLE_CERTIFICATE_SECRET != ''
+        shell: bash
+        run: |
+          {
+            echo "APPLE_CERTIFICATE=$APPLE_CERTIFICATE_SECRET"
+            echo "APPLE_CERTIFICATE_PASSWORD=$APPLE_CERTIFICATE_PASSWORD_SECRET"
+            echo "APPLE_SIGNING_IDENTITY=$APPLE_SIGNING_IDENTITY_SECRET"
+            echo "APPLE_ID=$APPLE_ID_SECRET"
+            echo "APPLE_PASSWORD=$APPLE_PASSWORD_SECRET"
+            echo "APPLE_TEAM_ID=$APPLE_TEAM_ID_SECRET"
+          } >> "$GITHUB_ENV"
+          echo "เปิด macOS signing + notarize (พบ cert secret)"
+
       - name: build GUI + สร้าง release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # ── macOS code-sign + notarize ──
-          # ถ้ายังไม่ได้ตั้ง secrets เหล่านี้ ค่าจะเป็นค่าว่าง → tauri sign แบบ adhoc ตามเดิม (build ไม่พัง)
-          # ตั้งครบเมื่อไหร่ (มี Apple Developer ID) → sign + notarize อัตโนมัติ, ผู้ใช้ไม่ต้อง xattr
-          # วิธีเอาค่า: ดู README หัวข้อ "macOS notarization (CI)"
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}                   # .p12 (Developer ID Application) → base64
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }} # รหัสตอน export .p12
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}         # "Developer ID Application: ชื่อ (TEAMID)"
-          APPLE_ID: ${{ secrets.APPLE_ID }}                                     # Apple ID email
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}                         # app-specific password (ไม่ใช่รหัส Apple ID จริง)
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}                           # Team ID 10 หลัก
+          # APPLE_* มาจาก $GITHUB_ENV (step "setup macOS signing") เฉพาะตอนมี cert จริง
+          # ไม่มี cert → ไม่ได้ set → tauri build แบบ adhoc ตามเดิม (ไม่พัง)
         with:
           # tag → ตั้งชื่อ release; dispatch (ไม่ใช่ tag) → ปล่อยว่าง = build เฉย ๆ ไม่สร้าง release
           tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
