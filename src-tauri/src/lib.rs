@@ -80,6 +80,12 @@ fn vdo_root() -> String {
     core::vdo_root().display().to_string()
 }
 
+/// เวอร์ชันแอป (จาก Cargo.toml ของ crate นี้) — โชว์ใน "เกี่ยวกับ" + status bar
+#[tauri::command]
+fn app_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
+
 /// ดึงชื่อเรื่อง + thumbnail จาก URL (เติมให้อัตโนมัติ)
 #[tauri::command]
 fn probe_meta(
@@ -361,6 +367,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             categories,
             vdo_root,
+            app_version,
             probe_meta,
             playlist_probe,
             clipboard,

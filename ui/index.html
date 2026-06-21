@@ -238,6 +238,38 @@
           </p>
         </section>
 
+        <!-- เกี่ยวกับ / ผู้พัฒนา -->
+        <section>
+          <div class="flex items-center gap-2 mb-2">
+            <i data-lucide="info" style="width:15px;height:15px;color:var(--muted)"></i>
+            <span class="ink font-semibold">เกี่ยวกับ</span>
+          </div>
+          <div class="set-card p-3 flex items-center gap-3">
+            <span class="grid place-items-center w-10 h-10 rounded-xl shrink-0" style="background:rgba(11,136,238,.12)"><i data-lucide="cloud" style="width:20px;height:20px;color:var(--green)"></i></span>
+            <div class="flex-1 min-w-0">
+              <p class="ink font-semibold flex items-center gap-2">vdo-dl <span id="about-ver" class="muted text-xs font-normal px-1.5 py-0.5 rounded" style="background:var(--hover)">v—</span></p>
+              <p class="muted text-xs mt-0.5">โหลดวิดีโอคุณภาพสูงสุด · core zero-dependency</p>
+            </div>
+          </div>
+          <div class="set-card p-3 mt-2 space-y-2.5 text-xs">
+            <div class="flex items-center gap-2">
+              <i data-lucide="user" style="width:14px;height:14px;color:var(--muted)" class="shrink-0"></i>
+              <span class="muted">ผู้พัฒนา</span>
+              <span class="ink font-medium ml-auto">codemunha · chalermporn</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <i data-lucide="globe" style="width:14px;height:14px;color:var(--muted)" class="shrink-0"></i>
+              <span class="muted">เว็บไซต์</span>
+              <button onclick="openExt('https://codemunha.com')" class="font-medium ml-auto hover:underline" style="color:var(--green-d)">codemunha.com</button>
+            </div>
+            <div class="flex items-center gap-2">
+              <i data-lucide="github" style="width:14px;height:14px;color:var(--muted)" class="shrink-0"></i>
+              <span class="muted">ซอร์สโค้ด</span>
+              <button onclick="openExt('https://github.com/chalermporn/vdo-ld')" class="font-medium ml-auto hover:underline truncate" style="color:var(--green-d)">github.com/chalermporn/vdo-ld</button>
+            </div>
+          </div>
+        </section>
+
       </div>
 
       <!-- footer -->
@@ -286,7 +318,10 @@
   <!-- status bar -->
   <footer class="flex items-center justify-between gap-2 px-4 h-9 border-t line panel text-xs muted shrink-0">
     <span id="stat" class="truncate">พร้อม · yt-dlp + ffmpeg bundled</span>
-    <span class="flex items-center gap-1 shrink-0"><i data-lucide="hard-drive" style="width:14px;height:14px"></i> <span id="rootbar" class="hidden sm:inline">~/VDO</span></span>
+    <span class="flex items-center gap-2.5 shrink-0">
+      <button id="ver" onclick="toggleSettings()" class="muted hover:underline" title="เกี่ยวกับ"></button>
+      <span class="flex items-center gap-1"><i data-lucide="hard-drive" style="width:14px;height:14px"></i> <span id="rootbar" class="hidden sm:inline">~/VDO</span></span>
+    </span>
   </footer>
 
   <!-- confirm modal -->
@@ -759,6 +794,8 @@ async function reveal(id){ const r=rows.find(x=>x.id===id); if(r?.path && inTaur
 const revealPath = reveal; // group/child เปิดโฟลเดอร์ด้วย path ของแถวนั้น
 // เปิดลิงก์ต้นทางของแถวนั้น (รู้ว่าโหลดมาจากไหน)
 async function openSrc(id){ const r=rows.find(x=>x.id===id); if(r?.url && inTauri){ try{ await invoke('open_url',{url:r.url}); }catch(e){ setStat('เปิดต้นทางไม่ได้: '+(e?.message||e)); } } }
+// เปิดลิงก์ภายนอก (เว็บผู้พัฒนา/ซอร์ส) ในเบราว์เซอร์
+function openExt(url){ if(inTauri){ invoke('open_url',{url}).catch(e=>setStat('เปิดไม่ได้: '+(e?.message||e))); } else { window.open(url,'_blank'); } }
 function retry(id){ const r=rows.find(x=>x.id===id); if(!r)return;
   $('mode').value=r.kind==='audio'?'audio':'video';
   syncMode();
@@ -902,6 +939,10 @@ async function init(){
 
   if(!inTauri){ setStat('(เดโม ในเบราว์เซอร์ — เปิดผ่านแอปเพื่อโหลดจริง)'); return; }
 
+  try{
+    const ver=await invoke('app_version');
+    $('ver').textContent='v'+ver; $('about-ver').textContent='v'+ver;
+  }catch(e){}
   try{
     const root=await invoke('vdo_root');
     $('rootbar').textContent=root; $('set-root').textContent=root;
