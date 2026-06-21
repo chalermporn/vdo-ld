@@ -15,13 +15,13 @@
 เติมรายการใหม่ที่นี่ระหว่างพัฒนา.
 
 ### Added
-- _(ของใหม่)_
+- **`scripts/release.sh` + `Makefile`** — ออก release ในคำสั่งเดียว: `make release VERSION=X.Y.Z`
+  เลื่อน CHANGELOG `[Unreleased]` → `[X.Y.Z]` (ตัด placeholder/หัวข้อว่าง), bump 3 manifest +
+  `Cargo.lock`, commit, tag, push. มี `--dry-run`/`--no-push`, abort ถ้า section ไม่มีเนื้อหาจริง.
 
 ### Changed
-- _(ปรับพฤติกรรม/ของเดิม)_
-
-### Fixed
-- _(แก้บั๊ก)_
+- เลิก track build artifact ใต้ `target/` (binary, fingerprint, deps) ที่ค้างจากก่อนมี `.gitignore` —
+  repo สะอาดขึ้น, build ใหม่ไม่ขึ้น dirty อีก. ตัวโปรแกรม (CLI + GUI binary) เหมือน v0.1.3.
 
 ## [0.1.3] - 2026-06-21
 
