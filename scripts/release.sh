@@ -56,7 +56,8 @@ if [ "$DRY" -eq 0 ] && [ -n "$(git status --porcelain --untracked-files=no)" ]; 
 fi
 git rev-parse "$TAG" >/dev/null 2>&1 && die "tag $TAG มีอยู่แล้ว"
 
-say "เตรียมออก ${c_grn}$TAG${c_off} (วันที่ $DATE)${DRY:+  ${c_dim}[dry-run]${c_off}}"
+dlabel=""; [ "$DRY" -eq 1 ] && dlabel="  ${c_dim}[dry-run]${c_off}"
+say "เตรียมออก ${c_grn}$TAG${c_off} (วันที่ $DATE)${dlabel}"
 
 # ── 1) CHANGELOG ─────────────────────────────────────────────────────────
 have_section() { grep -qE "^## \[$VER\]" CHANGELOG.md; }
