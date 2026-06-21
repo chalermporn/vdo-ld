@@ -15,6 +15,17 @@
 เติมรายการใหม่ที่นี่ระหว่างพัฒนา.
 
 ### Added
+- _(ของใหม่)_
+
+### Changed
+- _(ปรับพฤติกรรม/ของเดิม)_
+
+### Fixed
+- _(แก้บั๊ก)_
+
+## [0.1.4] - 2026-06-21
+
+### Added
 - **`scripts/release.sh` + `Makefile`** — ออก release ในคำสั่งเดียว: `make release VERSION=X.Y.Z`
   เลื่อน CHANGELOG `[Unreleased]` → `[X.Y.Z]` (ตัด placeholder/หัวข้อว่าง), bump 3 manifest +
   `Cargo.lock`, commit, tag, push. มี `--dry-run`/`--no-push`, abort ถ้า section ไม่มีเนื้อหาจริง.
@@ -99,7 +110,8 @@
 - ไม่รองรับเนื้อหา DRM/auth-bypass (เช่น Udemy Business — โหลดไม่ได้ถาวร).
 - เครื่องที่ไม่มี `sqlite3` → ข้าม index เงียบ ๆ (best-effort) ไม่กระทบการโหลด.
 
-[Unreleased]: https://github.com/chalermporn/vdo-ld/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/chalermporn/vdo-ld/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/chalermporn/vdo-ld/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/chalermporn/vdo-ld/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/chalermporn/vdo-ld/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/chalermporn/vdo-ld/compare/v0.1.0...v0.1.1
