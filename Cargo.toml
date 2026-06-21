@@ -1,6 +1,6 @@
 [package]
 name = "vdo-dl"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2021"
 description = "ส่งลิงค์วิดีโอ → ได้ไฟล์คุณภาพสูงสุด แล้วจัดเข้า ~/VDO/ (ห่อ yt-dlp + ffmpeg)"
 

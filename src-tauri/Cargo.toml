@@ -1,6 +1,6 @@
 [package]
 name = "vdo-dl-app"
-version = "0.1.4"
+version = "0.1.5"
 description = "vdo-dl — GUI โหลดวิดีโอ (Tauri) ครอบ core เดียวกับ CLI"
 authors = ["bird"]
 edition = "2021"

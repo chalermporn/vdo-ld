@@ -15,12 +15,20 @@
 เติมรายการใหม่ที่นี่ระหว่างพัฒนา.
 
 ### Added
-- **GUI: แสดงเวอร์ชัน + ส่วน "เกี่ยวกับ"** — เลขเวอร์ชันที่ status bar (มุมขวาล่าง, กดเปิดตั้งค่าได้)
-  และส่วน "เกี่ยวกับ" ในตั้งค่า: เวอร์ชัน, ผู้พัฒนา (codemunha · chalermporn), ลิงก์ codemunha.com +
-  GitHub. เวอร์ชันมาจาก `app_version` (`env!("CARGO_PKG_VERSION")`) — เด้งตาม build อัตโนมัติ.
+- _(ของใหม่)_
 
 ### Changed
 - _(ปรับพฤติกรรม/ของเดิม)_
+
+### Fixed
+- _(แก้บั๊ก)_
+
+## [0.1.5] - 2026-06-21
+
+### Added
+- **GUI: แสดงเวอร์ชัน + ส่วน "เกี่ยวกับ"** — เลขเวอร์ชันที่ status bar (มุมขวาล่าง, กดเปิดตั้งค่าได้)
+  และส่วน "เกี่ยวกับ" ในตั้งค่า: เวอร์ชัน, ผู้พัฒนา (codemunha · chalermporn), ลิงก์ codemunha.com +
+  GitHub. เวอร์ชันมาจาก `app_version` (`env!("CARGO_PKG_VERSION")`) — เด้งตาม build อัตโนมัติ.
 
 ### Fixed
 - `scripts/release.sh`: ป้าย `[dry-run]` เคยโผล่ตอนรันจริง (`${DRY:+…}` มองว่า `"0"` non-empty) —
@@ -113,7 +121,8 @@
 - ไม่รองรับเนื้อหา DRM/auth-bypass (เช่น Udemy Business — โหลดไม่ได้ถาวร).
 - เครื่องที่ไม่มี `sqlite3` → ข้าม index เงียบ ๆ (best-effort) ไม่กระทบการโหลด.
 
-[Unreleased]: https://github.com/chalermporn/vdo-ld/compare/v0.1.4...HEAD
+[Unreleased]: https://github.com/chalermporn/vdo-ld/compare/v0.1.5...HEAD
+[0.1.5]: https://github.com/chalermporn/vdo-ld/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/chalermporn/vdo-ld/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/chalermporn/vdo-ld/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/chalermporn/vdo-ld/compare/v0.1.1...v0.1.2
